@@ -1,0 +1,13 @@
+{
+  "itemGroup.photbar": "Example Mod Tab",
+  "block.photbar.example_block": "Example Block",
+  "item.photbar.example_item": "Example Item",
+
+  "photbar.configuration.title": "P-Hotbar Configs",
+  "photbar.configuration.section.photbar.common.toml": "P-Hotbar Configs",
+  "photbar.configuration.section.photbar.common.toml.title": "P-Hotbar Configs",
+  "photbar.configuration.items": "Item List",
+  "photbar.configuration.logDirtBlock": "Log Dirt Block",
+  "photbar.configuration.magicNumberIntroduction": "Magic Number Text",
+  "photbar.configuration.magicNumber": "Magic Number"
+}
