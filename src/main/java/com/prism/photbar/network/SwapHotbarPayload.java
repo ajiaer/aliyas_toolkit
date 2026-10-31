@@ -38,7 +38,7 @@ public record SwapHotbarPayload() implements CustomPacketPayload {
      */
     public static void handle(SwapHotbarPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
-            if (!Config.ENABLED.get()) {
+            if (!Config.ENABLE_HOTBAR_SWAP.getAsBoolean()) {
                 return;
             }
             if (context.player() instanceof ServerPlayer player) {

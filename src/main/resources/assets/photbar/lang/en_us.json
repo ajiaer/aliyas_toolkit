@@ -5,13 +5,15 @@
 
   "key.categories.photbar": "P-Hotbar",
   "key.photbar.swap_hotbar": "Swap Hotbar with Last Inventory Row",
+  "key.photbar.open_whitelist": "Open Item Whitelist",
+
+  "gui.photbar.whitelist.title": "Item Whitelist",
+  "gui.photbar.close": "Close",
 
   "photbar.configuration.title": "P-Hotbar Configs",
   "photbar.configuration.section.photbar.common.toml": "P-Hotbar Configs",
   "photbar.configuration.section.photbar.common.toml.title": "P-Hotbar Configs",
-  "photbar.configuration.items": "Item List",
-  "photbar.configuration.logDirtBlock": "Log Dirt Block",
-  "photbar.configuration.magicNumberIntroduction": "Magic Number Text",
-  "photbar.configuration.magicNumber": "Magic Number",
-  "photbar.configuration.enabled": "Enable Hotbar Swap"
+  "photbar.configuration.enableHotbarSwap": "Enable Hotbar Swap Key",
+  "photbar.configuration.enableAutoRefill": "Enable Automatic Refill",
+  "photbar.configuration.requireExactItemMatch": "Require Exactly Identical Items"
 }

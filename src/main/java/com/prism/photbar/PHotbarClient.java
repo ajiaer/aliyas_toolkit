@@ -1,11 +1,15 @@
 package com.prism.photbar;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.prism.photbar.client.ClientAutoRefill;
+import com.prism.photbar.client.WhitelistScreen;
+import com.prism.photbar.network.OpenWhitelistPayload;
 import com.prism.photbar.network.SwapHotbarPayload;
 
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.ConnectionProtocol;
+import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -15,9 +19,11 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
+import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.client.settings.KeyConflictContext;
+import net.neoforged.neoforge.client.settings.KeyModifier;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.registration.NetworkRegistry;
 
@@ -30,8 +36,6 @@ import org.lwjgl.glfw.GLFW;
 public class PHotbarClient {
     /** 按键绑定分类（显示在“选项 -> 控制 -> 按键绑定”里的分类名）。 */
     public static final String KEY_CATEGORY = "key.categories." + PHotbar.MODID;
-    /** 按键绑定的翻译键。 */
-    public static final String KEY_SWAP_HOTBAR = "key." + PHotbar.MODID + ".swap_hotbar";
 
     /**
      * 交换快捷栏的快捷键。
@@ -40,8 +44,22 @@ public class PHotbarClient {
      * 绑定结果会保存到 {@code options.txt}（形如 {@code key_key.photbar.swap_hotbar:key.keyboard.x}）。
      */
     public static final KeyMapping SWAP_HOTBAR_KEY = new KeyMapping(
-            KEY_SWAP_HOTBAR,
+            "key." + PHotbar.MODID + ".swap_hotbar",
             KeyConflictContext.IN_GAME, // 只在游戏内生效，不会和 GUI 里的按键冲突
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_X,
+            KEY_CATEGORY);
+
+    /**
+     * 打开白名单配置界面的快捷键。
+     * <p>
+     * 默认 Alt + X（同样可以在控制界面里修改）。带修饰键的绑定不会和上面的单键 X 互相触发：
+     * NeoForge 的按键查找会按当前按下的修饰键过滤。
+     */
+    public static final KeyMapping OPEN_WHITELIST_KEY = new KeyMapping(
+            "key." + PHotbar.MODID + ".open_whitelist",
+            KeyConflictContext.IN_GAME,
+            KeyModifier.ALT,
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_X,
             KEY_CATEGORY);
@@ -54,49 +72,91 @@ public class PHotbarClient {
 
         // 按键绑定必须在 mod 事件总线的 RegisterKeyMappingsEvent 中注册，否则不会出现在控制界面里
         modEventBus.addListener(PHotbarClient::onRegisterKeyMappings);
+        // 容器菜单对应的界面也要注册，否则打开白名单界面时客户端不知道怎么画
+        modEventBus.addListener(PHotbarClient::onRegisterMenuScreens);
     }
 
     private static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(SWAP_HOTBAR_KEY);
+        event.register(OPEN_WHITELIST_KEY);
+    }
+
+    private static void onRegisterMenuScreens(RegisterMenuScreensEvent event) {
+        event.register(PHotbar.WHITELIST_MENU.get(), WhitelistScreen::new);
     }
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
-        PHotbar.LOGGER.info("P-Hotbar client setup complete, swap key defaults to X");
+        PHotbar.LOGGER.info("P-Hotbar client setup complete (swap: X, whitelist: Alt+X)");
     }
 
     /**
      * 每个客户端 tick 检查一次按键队列。
      * <p>
      * 用 {@link KeyMapping#consumeClick()} 而不是 {@code isDown()}：前者只在“按下”的那一次返回 true，
-     * 长按不会连续触发交换。
+     * 长按不会连续触发。
      */
     @SubscribeEvent
     static void onClientTick(ClientTickEvent.Post event) {
         Minecraft minecraft = Minecraft.getInstance();
+
+        while (OPEN_WHITELIST_KEY.consumeClick()) {
+            tryOpenWhitelist(minecraft);
+        }
         while (SWAP_HOTBAR_KEY.consumeClick()) {
             trySwap(minecraft);
         }
     }
 
     private static void trySwap(Minecraft minecraft) {
-        // 没有进入世界 / 打开了任意 GUI（背包、箱子、聊天）时都不处理
-        if (minecraft.player == null || minecraft.getConnection() == null || minecraft.screen != null) {
+        if (!canSend(minecraft)) {
             return;
         }
-        if (minecraft.player.isSpectator()) {
+        if (!Config.ENABLE_HOTBAR_SWAP.getAsBoolean()) {
             return;
         }
-
-        // 交换是在服务端执行的，如果对面没装本模组（原版服务器、或没装这个模组的 NeoForge 服务器），
-        // 发包会让 NeoForge 以“未知通道”为由断开连接，所以必须先确认通道可用。
-        // 单人游戏/局域网主机、以及装了这个模组的服务器都会返回 true。
-        if (!NetworkRegistry.hasChannel(minecraft.getConnection().getConnection(), ConnectionProtocol.PLAY, SwapHotbarPayload.TYPE.id())) {
+        if (!hasChannel(minecraft, SwapHotbarPayload.TYPE.id())) {
             return;
         }
 
         // 真正的交换在服务端完成（物品栏是服务端权威数据），这里只发一个请求包
         PacketDistributor.sendToServer(SwapHotbarPayload.INSTANCE);
+
+        // 交换会让一些格子变空，这不属于“物品消失”，所以要抑制自动补充
+        ClientAutoRefill.suppressAfterSwap();
+    }
+
+    private static void tryOpenWhitelist(Minecraft minecraft) {
+        if (!canSend(minecraft) || minecraft.player.isSpectator()) {
+            return;
+        }
+        if (!hasChannel(minecraft, OpenWhitelistPayload.TYPE.id())) {
+            return;
+        }
+
+        // 界面由服务端创建（容器菜单），客户端会自动打开对应的 Screen
+        PacketDistributor.sendToServer(OpenWhitelistPayload.INSTANCE);
+    }
+
+    /**
+     * 基础可用性检查：进入了世界、没有打开任何 GUI、还活着。
+     */
+    private static boolean canSend(Minecraft minecraft) {
+        return minecraft.player != null
+                && minecraft.getConnection() != null
+                && minecraft.screen == null
+                && minecraft.player.isAlive()
+                && !minecraft.player.isDeadOrDying();
+    }
+
+    /**
+     * 对面是否支持这个通道。
+     * <p>
+     * 单人游戏/局域网主机、以及装了本模组的服务器都会返回 true；原版服务器或没装本模组的服务器返回 false，
+     * 此时不发包，避免 NeoForge 以“未知通道”为由断开连接。
+     */
+    private static boolean hasChannel(Minecraft minecraft, ResourceLocation payloadId) {
+        return NetworkRegistry.hasChannel(minecraft.getConnection().getConnection(), ConnectionProtocol.PLAY, payloadId);
     }
 }
 

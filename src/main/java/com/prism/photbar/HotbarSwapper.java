@@ -54,13 +54,7 @@ public final class HotbarSwapper {
         // 标记物品栏已变化（影响 timesChanged，例如成就/统计等依赖）
         inventory.setChanged();
 
-        // containerId = 0 的包在客户端会被应用到 inventoryMenu 上，快捷栏槽位比较特殊，
-        // 其余格子只有在当前打开的菜单就是 inventoryMenu 时才会被应用，所以两个都广播一遍：
-        // 1) inventoryMenu：玩家没有打开任何容器时走这里
-        // 2) 当前打开的容器菜单：玩家打开箱子等 GUI 时走这里（否则客户端 9-35 格会延迟到下一 tick 才更新）
-        player.inventoryMenu.broadcastChanges();
-        if (player.containerMenu != player.inventoryMenu) {
-            player.containerMenu.broadcastChanges();
-        }
+        // 把变化同步给客户端
+        InventorySync.sync(player);
     }
 }
