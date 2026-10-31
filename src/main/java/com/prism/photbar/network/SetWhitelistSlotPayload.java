@@ -1,7 +1,6 @@
 package com.prism.photbar.network;
 
 import com.prism.photbar.PHotbar;
-import com.prism.photbar.WhitelistData;
 import com.prism.photbar.menu.WhitelistMenu;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -9,7 +8,6 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -45,14 +43,12 @@ public record SetWhitelistSlotPayload(int index, ItemStack stack) implements Cus
             if (!(player.containerMenu instanceof WhitelistMenu menu)) {
                 return;
             }
-            MinecraftServer server = player.getServer();
-            if (server == null) {
-                return;
-            }
 
             ItemStack stack = payload.stack().copyWithCount(1);
-            menu.getWhitelist().setItem(payload.index(), stack);
-            WhitelistData.get(server).setSlot(payload.index(), stack);
+            // 写入这名玩家自己的白名单（玩家数据附件）
+            player.getData(PHotbar.WHITELIST).setSlot(payload.index(), stack);
+            // 同步界面显示
+            menu.getWhitelist().setItem(payload.index(), stack.copy());
             menu.broadcastChanges();
         });
     }

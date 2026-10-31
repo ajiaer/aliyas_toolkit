@@ -1,7 +1,6 @@
 package com.prism.photbar;
 
 import net.minecraft.core.component.DataComponents;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
@@ -52,13 +51,8 @@ public final class AutoRefill {
             return;
         }
 
-        MinecraftServer server = player.getServer();
-        if (server == null) {
-            return;
-        }
-
-        // 只有白名单里的物品才会自动补充
-        if (!isWhitelisted(WhitelistData.get(server), vanished)) {
+        // 只有白名单里的物品才会自动补充（白名单是玩家自己的数据）
+        if (!isWhitelisted(player.getData(PHotbar.WHITELIST), vanished)) {
             return;
         }
 

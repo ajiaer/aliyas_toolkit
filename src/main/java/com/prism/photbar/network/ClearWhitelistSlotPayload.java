@@ -1,7 +1,6 @@
 package com.prism.photbar.network;
 
 import com.prism.photbar.PHotbar;
-import com.prism.photbar.WhitelistData;
 import com.prism.photbar.menu.WhitelistMenu;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -9,7 +8,6 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -40,13 +38,10 @@ public record ClearWhitelistSlotPayload(int index) implements CustomPacketPayloa
             if (!(player.containerMenu instanceof WhitelistMenu menu)) {
                 return;
             }
-            MinecraftServer server = player.getServer();
-            if (server == null) {
-                return;
-            }
 
+            // 清空这名玩家自己白名单的这一格，并同步界面
+            player.getData(PHotbar.WHITELIST).setSlot(payload.index(), ItemStack.EMPTY);
             menu.getWhitelist().setItem(payload.index(), ItemStack.EMPTY);
-            WhitelistData.get(server).setSlot(payload.index(), ItemStack.EMPTY);
             menu.broadcastChanges();
         });
     }

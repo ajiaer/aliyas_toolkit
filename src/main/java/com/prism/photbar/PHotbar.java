@@ -23,6 +23,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
@@ -31,6 +32,7 @@ import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
+import net.neoforged.neoforge.registries.NeoForgeRegistries;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(PHotbar.MODID)
@@ -47,10 +49,23 @@ public class PHotbar {
     public static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
     // 容器菜单类型（白名单配置界面）
     public static final DeferredRegister<MenuType<?>> MENU_TYPES = DeferredRegister.create(Registries.MENU, MODID);
+    // 玩家数据附件（per-player data）
+    public static final DeferredRegister<AttachmentType<?>> ATTACHMENT_TYPES = DeferredRegister.create(NeoForgeRegistries.Keys.ATTACHMENT_TYPES, MODID);
 
     /** 白名单配置界面的菜单类型。 */
     public static final DeferredHolder<MenuType<?>, MenuType<WhitelistMenu>> WHITELIST_MENU = MENU_TYPES.register("whitelist",
             () -> IMenuTypeExtension.create((containerId, inventory, data) -> new WhitelistMenu(containerId, inventory)));
+
+    /**
+     * 每个玩家自己的物品白名单。
+     * <p>
+     * 绑定在玩家数据上：每名玩家独立一份，随玩家存档保存，死亡重生后不会丢失。
+     */
+    public static final DeferredHolder<AttachmentType<?>, AttachmentType<WhitelistData>> WHITELIST = ATTACHMENT_TYPES.register("whitelist",
+            () -> AttachmentType.builder(WhitelistData::new)
+                    .serialize(WhitelistData.CODEC)
+                    .copyOnDeath()
+                    .build());
 
     // Creates a new Block with the id "photbar:example_block", combining the namespace and path
     public static final DeferredBlock<Block> EXAMPLE_BLOCK = BLOCKS.registerSimpleBlock("example_block", BlockBehaviour.Properties.of().mapColor(MapColor.STONE));
@@ -84,6 +99,8 @@ public class PHotbar {
         CREATIVE_MODE_TABS.register(modEventBus);
         // 注册菜单类型
         MENU_TYPES.register(modEventBus);
+        // 注册玩家数据附件
+        ATTACHMENT_TYPES.register(modEventBus);
 
         // Register ourselves for server and other game events we are interested in.
         // Note that this is necessary if and only if we want *this* class (PHotbar) to respond directly to events.
