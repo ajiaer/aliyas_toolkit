@@ -1,7 +1,7 @@
-package com.prism.photbar.menu;
+package com.prism.aliyastoolkit.menu;
 
-import com.prism.photbar.PHotbar;
-import com.prism.photbar.WhitelistData;
+import com.prism.aliyastoolkit.AliyasToolkit;
+import com.prism.aliyastoolkit.WhitelistData;
 
 import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
@@ -39,7 +39,7 @@ public class WhitelistMenu extends AbstractContainerMenu {
     }
 
     public WhitelistMenu(int containerId, Inventory playerInventory, Container whitelist) {
-        super(PHotbar.WHITELIST_MENU.get(), containerId);
+        super(AliyasToolkit.WHITELIST_MENU.get(), containerId);
         checkContainerSize(whitelist, WHITELIST_SIZE);
         this.whitelist = whitelist;
 

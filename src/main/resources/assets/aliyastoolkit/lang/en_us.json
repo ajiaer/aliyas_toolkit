@@ -1,0 +1,19 @@
+{
+  "itemGroup.aliyastoolkit": "Example Mod Tab",
+  "block.aliyastoolkit.example_block": "Example Block",
+  "item.aliyastoolkit.example_item": "Example Item",
+
+  "key.categories.aliyastoolkit": "Aliya's Toolkit",
+  "key.aliyastoolkit.swap_hotbar": "Swap Hotbar with Last Inventory Row",
+  "key.aliyastoolkit.open_whitelist": "Open Item Whitelist",
+
+  "gui.aliyastoolkit.whitelist.title": "Item Whitelist",
+  "gui.aliyastoolkit.close": "Close",
+
+  "aliyastoolkit.configuration.title": "Aliya's Toolkit Configs",
+  "aliyastoolkit.configuration.section.aliyastoolkit.common.toml": "Aliya's Toolkit Configs",
+  "aliyastoolkit.configuration.section.aliyastoolkit.common.toml.title": "Aliya's Toolkit Configs",
+  "aliyastoolkit.configuration.enableHotbarSwap": "Enable Hotbar Swap Key",
+  "aliyastoolkit.configuration.enableAutoRefill": "Enable Automatic Refill",
+  "aliyastoolkit.configuration.requireExactItemMatch": "Require Exactly Identical Items"
+}

@@ -1,7 +1,7 @@
-package com.prism.photbar.network;
+package com.prism.aliyastoolkit.network;
 
-import com.prism.photbar.PHotbar;
-import com.prism.photbar.menu.WhitelistMenu;
+import com.prism.aliyastoolkit.AliyasToolkit;
+import com.prism.aliyastoolkit.menu.WhitelistMenu;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -21,7 +21,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 public record OpenWhitelistPayload() implements CustomPacketPayload {
     public static final OpenWhitelistPayload INSTANCE = new OpenWhitelistPayload();
 
-    public static final Type<OpenWhitelistPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(PHotbar.MODID, "open_whitelist"));
+    public static final Type<OpenWhitelistPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AliyasToolkit.MODID, "open_whitelist"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, OpenWhitelistPayload> STREAM_CODEC = StreamCodec.unit(INSTANCE);
 
@@ -36,8 +36,8 @@ public record OpenWhitelistPayload() implements CustomPacketPayload {
                 return;
             }
             player.openMenu(new SimpleMenuProvider(
-                    (containerId, inventory, p) -> WhitelistMenu.fromData(containerId, inventory, p.getData(PHotbar.WHITELIST)),
-                    Component.translatable("gui.photbar.whitelist.title")));
+                    (containerId, inventory, p) -> WhitelistMenu.fromData(containerId, inventory, p.getData(AliyasToolkit.WHITELIST)),
+                    Component.translatable("gui.aliyastoolkit.whitelist.title")));
         });
     }
 }

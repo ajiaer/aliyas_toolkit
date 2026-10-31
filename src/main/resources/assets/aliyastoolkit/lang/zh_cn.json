@@ -1,0 +1,19 @@
+{
+  "itemGroup.aliyastoolkit": "示例模组标签页",
+  "block.aliyastoolkit.example_block": "示例方块",
+  "item.aliyastoolkit.example_item": "示例物品",
+
+  "key.categories.aliyastoolkit": "Aliya's Toolkit",
+  "key.aliyastoolkit.swap_hotbar": "快捷栏与背包最后一行交换",
+  "key.aliyastoolkit.open_whitelist": "打开物品白名单",
+
+  "gui.aliyastoolkit.whitelist.title": "物品白名单",
+  "gui.aliyastoolkit.close": "关闭",
+
+  "aliyastoolkit.configuration.title": "Aliya's Toolkit 配置",
+  "aliyastoolkit.configuration.section.aliyastoolkit.common.toml": "Aliya's Toolkit 配置",
+  "aliyastoolkit.configuration.section.aliyastoolkit.common.toml.title": "Aliya's Toolkit 配置",
+  "aliyastoolkit.configuration.enableHotbarSwap": "启用快捷栏交换快捷键",
+  "aliyastoolkit.configuration.enableAutoRefill": "启用自动补充",
+  "aliyastoolkit.configuration.requireExactItemMatch": "自动补充物品完全一致"
+}

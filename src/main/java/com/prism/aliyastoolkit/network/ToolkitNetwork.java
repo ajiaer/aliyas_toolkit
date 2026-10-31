@@ -1,4 +1,4 @@
-package com.prism.photbar.network;
+package com.prism.aliyastoolkit.network;
 
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
@@ -6,7 +6,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 /**
  * 模组的网络包注册入口（在主类构造里挂到 mod 事件总线上）。
  */
-public final class PHotbarNetwork {
+public final class ToolkitNetwork {
     /**
      * 网络协议版本。
      * <p>
@@ -14,12 +14,12 @@ public final class PHotbarNetwork {
      */
     public static final String PROTOCOL_VERSION = "1";
 
-    private PHotbarNetwork() {
+    private ToolkitNetwork() {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
         // optional()：当服务器/客户端没有安装本模组时，缺少这些通道不会导致连接被拒绝。
-        // 发送前会用 NetworkRegistry.hasChannel 做检查（见 PHotbarClient / ClientAutoRefill），
+        // 发送前会用 NetworkRegistry.hasChannel 做检查（见 AliyasToolkitClient / ClientAutoRefill），
         // 否则把包发给没装模组的一方会让 NeoForge 直接断开连接。
         PayloadRegistrar registrar = event.registrar(PROTOCOL_VERSION).optional();
 

@@ -1,9 +1,9 @@
-package com.prism.photbar;
+package com.prism.aliyastoolkit;
 
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 /**
- * 模组配置。所有选项都会显示在“模组列表 -> P-Hotbar -> 配置”界面里。
+ * 模组配置。所有选项都会显示在“模组列表 -> Aliya's Toolkit -> 配置”界面里。
  */
 public class Config {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();

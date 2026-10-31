@@ -1,7 +1,7 @@
-package com.prism.photbar.client;
+package com.prism.aliyastoolkit.client;
 
-import com.prism.photbar.PHotbar;
-import com.prism.photbar.network.RefillHotbarPayload;
+import com.prism.aliyastoolkit.AliyasToolkit;
+import com.prism.aliyastoolkit.network.RefillHotbarPayload;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -26,7 +26,7 @@ import net.neoforged.neoforge.network.registration.NetworkRegistry;
  * <li>按快捷键交换后会用 {@link #suppressAfterSwap()} 抑制一小段时间，不会因为“交换后格子变空”而补充</li>
  * </ul>
  */
-@EventBusSubscriber(modid = PHotbar.MODID, value = Dist.CLIENT)
+@EventBusSubscriber(modid = AliyasToolkit.MODID, value = Dist.CLIENT)
 public final class ClientAutoRefill {
     private static final int HOTBAR_SIZE = 9;
     /** 交换快捷栏后抑制自动补充的 tick 数（0.5 秒）。 */

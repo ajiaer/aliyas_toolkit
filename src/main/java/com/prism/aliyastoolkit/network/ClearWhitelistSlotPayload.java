@@ -1,7 +1,7 @@
-package com.prism.photbar.network;
+package com.prism.aliyastoolkit.network;
 
-import com.prism.photbar.PHotbar;
-import com.prism.photbar.menu.WhitelistMenu;
+import com.prism.aliyastoolkit.AliyasToolkit;
+import com.prism.aliyastoolkit.menu.WhitelistMenu;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -16,7 +16,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
  * 客户端 -> 服务端：清空白名单的某一格（界面里右键格子）。
  */
 public record ClearWhitelistSlotPayload(int index) implements CustomPacketPayload {
-    public static final Type<ClearWhitelistSlotPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(PHotbar.MODID, "clear_whitelist_slot"));
+    public static final Type<ClearWhitelistSlotPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AliyasToolkit.MODID, "clear_whitelist_slot"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ClearWhitelistSlotPayload> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.VAR_INT, ClearWhitelistSlotPayload::index,
@@ -40,7 +40,7 @@ public record ClearWhitelistSlotPayload(int index) implements CustomPacketPayloa
             }
 
             // 清空这名玩家自己白名单的这一格，并同步界面
-            player.getData(PHotbar.WHITELIST).setSlot(payload.index(), ItemStack.EMPTY);
+            player.getData(AliyasToolkit.WHITELIST).setSlot(payload.index(), ItemStack.EMPTY);
             menu.getWhitelist().setItem(payload.index(), ItemStack.EMPTY);
             menu.broadcastChanges();
         });

@@ -1,4 +1,4 @@
-package com.prism.photbar;
+package com.prism.aliyastoolkit;
 
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerPlayer;
@@ -52,7 +52,7 @@ public final class AutoRefill {
         }
 
         // 只有白名单里的物品才会自动补充（白名单是玩家自己的数据）
-        if (!isWhitelisted(player.getData(PHotbar.WHITELIST), vanished)) {
+        if (!isWhitelisted(player.getData(AliyasToolkit.WHITELIST), vanished)) {
             return;
         }
 

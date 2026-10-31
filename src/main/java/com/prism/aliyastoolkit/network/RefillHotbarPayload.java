@@ -1,7 +1,7 @@
-package com.prism.photbar.network;
+package com.prism.aliyastoolkit.network;
 
-import com.prism.photbar.AutoRefill;
-import com.prism.photbar.PHotbar;
+import com.prism.aliyastoolkit.AutoRefill;
+import com.prism.aliyastoolkit.AliyasToolkit;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -19,7 +19,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
  * 客户端只在“没有打开任何 GUI 且这一格刚从非空变成空”时发送，服务端会再校验一次。
  */
 public record RefillHotbarPayload(int hotbarSlot, ItemStack vanished) implements CustomPacketPayload {
-    public static final Type<RefillHotbarPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(PHotbar.MODID, "refill_hotbar"));
+    public static final Type<RefillHotbarPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AliyasToolkit.MODID, "refill_hotbar"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, RefillHotbarPayload> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.VAR_INT, RefillHotbarPayload::hotbarSlot,

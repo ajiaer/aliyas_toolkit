@@ -1,10 +1,10 @@
-package com.prism.photbar;
+package com.prism.aliyastoolkit;
 
 import com.mojang.blaze3d.platform.InputConstants;
-import com.prism.photbar.client.ClientAutoRefill;
-import com.prism.photbar.client.WhitelistScreen;
-import com.prism.photbar.network.OpenWhitelistPayload;
-import com.prism.photbar.network.SwapHotbarPayload;
+import com.prism.aliyastoolkit.client.ClientAutoRefill;
+import com.prism.aliyastoolkit.client.WhitelistScreen;
+import com.prism.aliyastoolkit.network.OpenWhitelistPayload;
+import com.prism.aliyastoolkit.network.SwapHotbarPayload;
 
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -30,21 +30,21 @@ import net.neoforged.neoforge.network.registration.NetworkRegistry;
 import org.lwjgl.glfw.GLFW;
 
 // This class will not load on dedicated servers. Accessing client side code from here is safe.
-@Mod(value = PHotbar.MODID, dist = Dist.CLIENT)
+@Mod(value = AliyasToolkit.MODID, dist = Dist.CLIENT)
 // You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent
-@EventBusSubscriber(modid = PHotbar.MODID, value = Dist.CLIENT)
-public class PHotbarClient {
+@EventBusSubscriber(modid = AliyasToolkit.MODID, value = Dist.CLIENT)
+public class AliyasToolkitClient {
     /** 按键绑定分类（显示在“选项 -> 控制 -> 按键绑定”里的分类名）。 */
-    public static final String KEY_CATEGORY = "key.categories." + PHotbar.MODID;
+    public static final String KEY_CATEGORY = "key.categories." + AliyasToolkit.MODID;
 
     /**
      * 交换快捷栏的快捷键。
      * <p>
      * 默认 X，玩家可以在“选项 -> 控制 -> 按键绑定”里改成任意键，
-     * 绑定结果会保存到 {@code options.txt}（形如 {@code key_key.photbar.swap_hotbar:key.keyboard.x}）。
+     * 绑定结果会保存到 {@code options.txt}（形如 {@code key_key.aliyastoolkit.swap_hotbar:key.keyboard.x}）。
      */
     public static final KeyMapping SWAP_HOTBAR_KEY = new KeyMapping(
-            "key." + PHotbar.MODID + ".swap_hotbar",
+            "key." + AliyasToolkit.MODID + ".swap_hotbar",
             KeyConflictContext.IN_GAME, // 只在游戏内生效，不会和 GUI 里的按键冲突
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_X,
@@ -57,23 +57,23 @@ public class PHotbarClient {
      * NeoForge 的按键查找会按当前按下的修饰键过滤。
      */
     public static final KeyMapping OPEN_WHITELIST_KEY = new KeyMapping(
-            "key." + PHotbar.MODID + ".open_whitelist",
+            "key." + AliyasToolkit.MODID + ".open_whitelist",
             KeyConflictContext.IN_GAME,
             KeyModifier.ALT,
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_X,
             KEY_CATEGORY);
 
-    public PHotbarClient(IEventBus modEventBus, ModContainer container) {
+    public AliyasToolkitClient(IEventBus modEventBus, ModContainer container) {
         // Allows NeoForge to create a config screen for this mod's configs.
         // The config screen is accessed by going to the Mods screen > clicking on your mod > clicking on config.
         // Do not forget to add translations for your config options to the en_us.json file.
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
 
         // 按键绑定必须在 mod 事件总线的 RegisterKeyMappingsEvent 中注册，否则不会出现在控制界面里
-        modEventBus.addListener(PHotbarClient::onRegisterKeyMappings);
+        modEventBus.addListener(AliyasToolkitClient::onRegisterKeyMappings);
         // 容器菜单对应的界面也要注册，否则打开白名单界面时客户端不知道怎么画
-        modEventBus.addListener(PHotbarClient::onRegisterMenuScreens);
+        modEventBus.addListener(AliyasToolkitClient::onRegisterMenuScreens);
     }
 
     private static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
@@ -82,12 +82,12 @@ public class PHotbarClient {
     }
 
     private static void onRegisterMenuScreens(RegisterMenuScreensEvent event) {
-        event.register(PHotbar.WHITELIST_MENU.get(), WhitelistScreen::new);
+        event.register(AliyasToolkit.WHITELIST_MENU.get(), WhitelistScreen::new);
     }
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
-        PHotbar.LOGGER.info("P-Hotbar client setup complete (swap: X, whitelist: Alt+X)");
+        AliyasToolkit.LOGGER.info("Aliya's Toolkit client setup complete (swap: X, whitelist: Alt+X)");
     }
 
     /**

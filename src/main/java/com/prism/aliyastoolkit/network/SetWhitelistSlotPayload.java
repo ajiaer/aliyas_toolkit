@@ -1,7 +1,7 @@
-package com.prism.photbar.network;
+package com.prism.aliyastoolkit.network;
 
-import com.prism.photbar.PHotbar;
-import com.prism.photbar.menu.WhitelistMenu;
+import com.prism.aliyastoolkit.AliyasToolkit;
+import com.prism.aliyastoolkit.menu.WhitelistMenu;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -16,7 +16,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
  * 客户端 -> 服务端：把白名单的某一格设置为指定物品（数量固定存 1）。
  */
 public record SetWhitelistSlotPayload(int index, ItemStack stack) implements CustomPacketPayload {
-    public static final Type<SetWhitelistSlotPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(PHotbar.MODID, "set_whitelist_slot"));
+    public static final Type<SetWhitelistSlotPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AliyasToolkit.MODID, "set_whitelist_slot"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, SetWhitelistSlotPayload> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.VAR_INT, SetWhitelistSlotPayload::index,
@@ -46,7 +46,7 @@ public record SetWhitelistSlotPayload(int index, ItemStack stack) implements Cus
 
             ItemStack stack = payload.stack().copyWithCount(1);
             // 写入这名玩家自己的白名单（玩家数据附件）
-            player.getData(PHotbar.WHITELIST).setSlot(payload.index(), stack);
+            player.getData(AliyasToolkit.WHITELIST).setSlot(payload.index(), stack);
             // 同步界面显示
             menu.getWhitelist().setItem(payload.index(), stack.copy());
             menu.broadcastChanges();

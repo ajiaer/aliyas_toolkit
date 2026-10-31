@@ -1,8 +1,8 @@
-package com.prism.photbar.client;
+package com.prism.aliyastoolkit.client;
 
-import com.prism.photbar.menu.WhitelistMenu;
-import com.prism.photbar.network.ClearWhitelistSlotPayload;
-import com.prism.photbar.network.SetWhitelistSlotPayload;
+import com.prism.aliyastoolkit.menu.WhitelistMenu;
+import com.prism.aliyastoolkit.network.ClearWhitelistSlotPayload;
+import com.prism.aliyastoolkit.network.SetWhitelistSlotPayload;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -45,7 +45,7 @@ public class WhitelistScreen extends AbstractContainerScreen<WhitelistMenu> {
         // 右上角关闭按钮
         this.addRenderableWidget(Button.builder(Component.literal("X"), button -> this.onClose())
                 .bounds(this.leftPos + this.imageWidth - 24, this.topPos + 4, 18, 18)
-                .tooltip(Tooltip.create(Component.translatable("gui.photbar.close")))
+                .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.close")))
                 .build());
     }
 

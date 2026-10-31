@@ -1,4 +1,4 @@
-package com.prism.photbar;
+package com.prism.aliyastoolkit;
 
 import net.minecraft.server.level.ServerPlayer;
 

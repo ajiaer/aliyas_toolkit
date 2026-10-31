@@ -1,4 +1,4 @@
-package com.prism.photbar;
+package com.prism.aliyastoolkit;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,7 +11,7 @@ import net.minecraft.world.item.ItemStack;
 /**
  * 玩家的物品白名单（3x3，共 9 格）。
  * <p>
- * 通过 Data Attachment 绑定在玩家身上（见 {@link PHotbar#WHITELIST}），所以：
+ * 通过 Data Attachment 绑定在玩家身上（见 {@link AliyasToolkit#WHITELIST}），所以：
  * <ul>
  * <li>每个玩家有自己独立的一份白名单，互不影响</li>
  * <li>随玩家数据一起保存（多人服存在玩家数据里，单人存在存档的 playerdata 里）</li>

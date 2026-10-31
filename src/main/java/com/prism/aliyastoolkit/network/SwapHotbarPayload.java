@@ -1,8 +1,8 @@
-package com.prism.photbar.network;
+package com.prism.aliyastoolkit.network;
 
-import com.prism.photbar.Config;
-import com.prism.photbar.HotbarSwapper;
-import com.prism.photbar.PHotbar;
+import com.prism.aliyastoolkit.Config;
+import com.prism.aliyastoolkit.HotbarSwapper;
+import com.prism.aliyastoolkit.AliyasToolkit;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -20,7 +20,7 @@ public record SwapHotbarPayload() implements CustomPacketPayload {
     /** 单例，发送时直接用这一个实例即可。 */
     public static final SwapHotbarPayload INSTANCE = new SwapHotbarPayload();
 
-    public static final Type<SwapHotbarPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(PHotbar.MODID, "swap_hotbar"));
+    public static final Type<SwapHotbarPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AliyasToolkit.MODID, "swap_hotbar"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, SwapHotbarPayload> STREAM_CODEC = StreamCodec.unit(INSTANCE);
 
