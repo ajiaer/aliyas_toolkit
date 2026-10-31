@@ -12,38 +12,38 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
 /**
- * 白名单配置界面用的容器菜单。
+ * “Aliya's Toolkit 配置”界面的容器菜单。
  * <p>
- * 布局：上方 3x3 白名单格子（0-8），下方玩家的背包 3 行 + 快捷栏（9-44）。
- * 没有人物/装备/合成区域。
+ * 布局：左侧 3x3 物品白名单（0-8），右侧是连锁破坏/自动补充的设置按钮（画在界面上，不是格子），
+ * 下方是玩家的背包 3 行 + 快捷栏（9-44）。没有人物/装备/合成区域。
  * <p>
  * 白名单格子既不能放入也不能取出（{@link WhitelistSlot}），设置/清空由
- * {@code WhitelistScreen} 拦截鼠标点击后发送自定义网络包完成。
+ * {@code ToolkitScreen} 拦截鼠标点击后发送自定义网络包完成。
  */
-public class WhitelistMenu extends AbstractContainerMenu {
+public class ToolkitMenu extends AbstractContainerMenu {
     public static final int WHITELIST_SIZE = 9;
     public static final int WHITELIST_COLUMNS = 3;
     /** 白名单格子左上角坐标（相对 GUI）。 */
-    public static final int WHITELIST_X = 61;
-    public static final int WHITELIST_Y = 18;
+    public static final int WHITELIST_X = 14;
+    public static final int WHITELIST_Y = 48;
     /** 玩家背包格子左上角坐标（相对 GUI）。 */
-    public static final int INVENTORY_X = 8;
-    public static final int INVENTORY_Y = 88;
-    public static final int HOTBAR_Y = 144;
+    public static final int INVENTORY_X = 49;
+    public static final int INVENTORY_Y = 146;
+    public static final int HOTBAR_Y = 204;
 
     private final Container whitelist;
 
     /** 客户端创建时使用（内容由服务端同步过来）。 */
-    public WhitelistMenu(int containerId, Inventory playerInventory) {
+    public ToolkitMenu(int containerId, Inventory playerInventory) {
         this(containerId, playerInventory, new SimpleContainer(WHITELIST_SIZE));
     }
 
-    public WhitelistMenu(int containerId, Inventory playerInventory, Container whitelist) {
-        super(AliyasToolkit.WHITELIST_MENU.get(), containerId);
+    public ToolkitMenu(int containerId, Inventory playerInventory, Container whitelist) {
+        super(AliyasToolkit.TOOLKIT_MENU.get(), containerId);
         checkContainerSize(whitelist, WHITELIST_SIZE);
         this.whitelist = whitelist;
 
-        // 上方 3x3 白名单
+        // 左侧 3x3 白名单
         for (int row = 0; row < 3; row++) {
             for (int column = 0; column < WHITELIST_COLUMNS; column++) {
                 int index = column + row * WHITELIST_COLUMNS;
@@ -54,7 +54,8 @@ public class WhitelistMenu extends AbstractContainerMenu {
         // 玩家背包 3 行
         for (int row = 0; row < 3; row++) {
             for (int column = 0; column < 9; column++) {
-                this.addSlot(new Slot(playerInventory, column + row * 9 + 9, INVENTORY_X + column * 18, INVENTORY_Y + row * 18));
+                this.addSlot(new Slot(playerInventory, column + row * 9 + 9, INVENTORY_X + column * 18,
+                        INVENTORY_Y + row * 18));
             }
         }
 
@@ -67,7 +68,7 @@ public class WhitelistMenu extends AbstractContainerMenu {
     /**
      * 用存档里的白名单构造菜单（服务端打开界面时使用）。
      */
-    public static WhitelistMenu fromData(int containerId, Inventory playerInventory, WhitelistData data) {
+    public static ToolkitMenu fromData(int containerId, Inventory playerInventory, WhitelistData data) {
         SimpleContainer container = new SimpleContainer(WHITELIST_SIZE);
         for (int i = 0; i < WHITELIST_SIZE; i++) {
             ItemStack stack = data.getSlot(i);
@@ -75,7 +76,7 @@ public class WhitelistMenu extends AbstractContainerMenu {
                 container.setItem(i, stack.copyWithCount(1));
             }
         }
-        return new WhitelistMenu(containerId, playerInventory, container);
+        return new ToolkitMenu(containerId, playerInventory, container);
     }
 
     public Container getWhitelist() {

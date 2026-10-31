@@ -52,11 +52,12 @@ public final class AutoRefill {
         }
 
         // 只有白名单里的物品才会自动补充（白名单是玩家自己的数据）
-        if (!isWhitelisted(player.getData(AliyasToolkit.WHITELIST), vanished)) {
+        ToolkitSettings settings = player.getData(AliyasToolkit.SETTINGS);
+        if (!isWhitelisted(player.getData(AliyasToolkit.WHITELIST), vanished, settings.requireExactItemMatch())) {
             return;
         }
 
-        int sourceSlot = findSourceSlot(inventory, vanished);
+        int sourceSlot = findSourceSlot(inventory, vanished, settings.requireExactItemMatch());
         if (sourceSlot < 0) {
             return;
         }
@@ -70,10 +71,10 @@ public final class AutoRefill {
         InventorySync.sync(player);
     }
 
-    private static boolean isWhitelisted(WhitelistData data, ItemStack stack) {
+    private static boolean isWhitelisted(WhitelistData data, ItemStack stack, boolean requireExact) {
         for (int i = 0; i < WhitelistData.SIZE; i++) {
             ItemStack entry = data.getSlot(i);
-            if (!entry.isEmpty() && matches(entry, stack)) {
+            if (!entry.isEmpty() && matches(entry, stack, requireExact)) {
                 return true;
             }
         }
@@ -85,13 +86,13 @@ public final class AutoRefill {
      *
      * @return 找到的槽位索引，找不到返回 -1
      */
-    private static int findSourceSlot(Inventory inventory, ItemStack wanted) {
+    private static int findSourceSlot(Inventory inventory, ItemStack wanted, boolean requireExact) {
         for (int slot = MAIN_INVENTORY_START; slot <= MAIN_INVENTORY_END; slot++) {
             ItemStack candidate = inventory.getItem(slot);
             if (candidate.isEmpty()) {
                 continue;
             }
-            if (matches(wanted, candidate)) {
+            if (matches(wanted, candidate, requireExact)) {
                 return slot;
             }
         }
@@ -101,18 +102,19 @@ public final class AutoRefill {
     /**
      * 判断两个物品是否算“同一个物品”。
      * <p>
-     * 由配置 {@code requireExactItemMatch} 决定：
+     * 由玩家自己的设置 {@link ToolkitSettings#requireExactItemMatch()} 决定（在“Aliya's Toolkit 配置”
+     * 界面的“自动补充”一栏里改）：
      * <ul>
      * <li>开启（默认）：物品类型 + 全部数据组件都要一致（附魔、自定义名称等），
      * 但<b>忽略耐久值</b> —— 否则“镐子用坏后补一把新的”永远匹配不上。</li>
      * <li>关闭：只比较物品类型，附魔/名称/属性都不管。</li>
      * </ul>
      */
-    public static boolean matches(ItemStack wanted, ItemStack candidate) {
+    public static boolean matches(ItemStack wanted, ItemStack candidate, boolean requireExact) {
         if (!ItemStack.isSameItem(wanted, candidate)) {
             return false;
         }
-        if (!Config.REQUIRE_EXACT_ITEM_MATCH.getAsBoolean()) {
+        if (!requireExact) {
             return true;
         }
         ItemStack a = wanted.copy();

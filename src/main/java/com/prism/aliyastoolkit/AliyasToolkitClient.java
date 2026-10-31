@@ -2,8 +2,8 @@ package com.prism.aliyastoolkit;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import com.prism.aliyastoolkit.client.ClientAutoRefill;
-import com.prism.aliyastoolkit.client.WhitelistScreen;
-import com.prism.aliyastoolkit.network.OpenWhitelistPayload;
+import com.prism.aliyastoolkit.client.ToolkitScreen;
+import com.prism.aliyastoolkit.network.OpenToolkitPayload;
 import com.prism.aliyastoolkit.network.SwapHotbarPayload;
 
 import net.minecraft.client.KeyMapping;
@@ -51,17 +51,30 @@ public class AliyasToolkitClient {
             KEY_CATEGORY);
 
     /**
-     * 打开白名单配置界面的快捷键。
+     * 打开“Aliya's Toolkit 配置”界面的快捷键。
      * <p>
      * 默认 Alt + X（同样可以在控制界面里修改）。带修饰键的绑定不会和上面的单键 X 互相触发：
      * NeoForge 的按键查找会按当前按下的修饰键过滤。
      */
-    public static final KeyMapping OPEN_WHITELIST_KEY = new KeyMapping(
-            "key." + AliyasToolkit.MODID + ".open_whitelist",
+    public static final KeyMapping OPEN_TOOLKIT_KEY = new KeyMapping(
+            "key." + AliyasToolkit.MODID + ".open_toolkit",
             KeyConflictContext.IN_GAME,
             KeyModifier.ALT,
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_X,
+            KEY_CATEGORY);
+
+    /**
+     * 连锁破坏的快捷键。
+     * <p>
+     * 默认 Z。按“按住”还是“切换”使用由玩家自己的设置决定（见 {@code ToolkitSettings.TriggerMode}），
+     * 配置界面里可以修改，键位本身可以在“选项 -> 控制 -> 按键绑定”里修改。
+     */
+    public static final KeyMapping CHAIN_MINE_KEY = new KeyMapping(
+            "key." + AliyasToolkit.MODID + ".chain_mine",
+            KeyConflictContext.IN_GAME,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_Z,
             KEY_CATEGORY);
 
     public AliyasToolkitClient(IEventBus modEventBus, ModContainer container) {
@@ -72,22 +85,23 @@ public class AliyasToolkitClient {
 
         // 按键绑定必须在 mod 事件总线的 RegisterKeyMappingsEvent 中注册，否则不会出现在控制界面里
         modEventBus.addListener(AliyasToolkitClient::onRegisterKeyMappings);
-        // 容器菜单对应的界面也要注册，否则打开白名单界面时客户端不知道怎么画
+        // 容器菜单对应的界面也要注册，否则打开配置界面时客户端不知道怎么画
         modEventBus.addListener(AliyasToolkitClient::onRegisterMenuScreens);
     }
 
     private static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(SWAP_HOTBAR_KEY);
-        event.register(OPEN_WHITELIST_KEY);
+        event.register(OPEN_TOOLKIT_KEY);
+        event.register(CHAIN_MINE_KEY);
     }
 
     private static void onRegisterMenuScreens(RegisterMenuScreensEvent event) {
-        event.register(AliyasToolkit.WHITELIST_MENU.get(), WhitelistScreen::new);
+        event.register(AliyasToolkit.TOOLKIT_MENU.get(), ToolkitScreen::new);
     }
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
-        AliyasToolkit.LOGGER.info("Aliya's Toolkit client setup complete (swap: X, whitelist: Alt+X)");
+        AliyasToolkit.LOGGER.info("Aliya's Toolkit client setup complete (swap: X, chain mining: Z, toolkit screen: Alt+X)");
     }
 
     /**
@@ -100,12 +114,13 @@ public class AliyasToolkitClient {
     static void onClientTick(ClientTickEvent.Post event) {
         Minecraft minecraft = Minecraft.getInstance();
 
-        while (OPEN_WHITELIST_KEY.consumeClick()) {
-            tryOpenWhitelist(minecraft);
+        while (OPEN_TOOLKIT_KEY.consumeClick()) {
+            tryOpenToolkit(minecraft);
         }
         while (SWAP_HOTBAR_KEY.consumeClick()) {
             trySwap(minecraft);
         }
+        // 连锁快捷键由 ChainMiningClient 处理（按住/切换两种模式，并且要同步给服务端）
     }
 
     private static void trySwap(Minecraft minecraft) {
@@ -126,16 +141,16 @@ public class AliyasToolkitClient {
         ClientAutoRefill.suppressAfterSwap();
     }
 
-    private static void tryOpenWhitelist(Minecraft minecraft) {
+    private static void tryOpenToolkit(Minecraft minecraft) {
         if (!canSend(minecraft) || minecraft.player.isSpectator()) {
             return;
         }
-        if (!hasChannel(minecraft, OpenWhitelistPayload.TYPE.id())) {
+        if (!hasChannel(minecraft, OpenToolkitPayload.TYPE.id())) {
             return;
         }
 
         // 界面由服务端创建（容器菜单），客户端会自动打开对应的 Screen
-        PacketDistributor.sendToServer(OpenWhitelistPayload.INSTANCE);
+        PacketDistributor.sendToServer(OpenToolkitPayload.INSTANCE);
     }
 
     /**

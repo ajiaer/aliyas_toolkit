@@ -1,7 +1,7 @@
 package com.prism.aliyastoolkit.network;
 
 import com.prism.aliyastoolkit.AliyasToolkit;
-import com.prism.aliyastoolkit.menu.WhitelistMenu;
+import com.prism.aliyastoolkit.menu.ToolkitMenu;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -36,11 +36,11 @@ public record SetWhitelistSlotPayload(int index, ItemStack stack) implements Cus
             if (payload.stack().isEmpty()) {
                 return;
             }
-            if (payload.index() < 0 || payload.index() >= WhitelistMenu.WHITELIST_SIZE) {
+            if (payload.index() < 0 || payload.index() >= ToolkitMenu.WHITELIST_SIZE) {
                 return;
             }
-            // 只有真的打开着白名单界面时才允许修改
-            if (!(player.containerMenu instanceof WhitelistMenu menu)) {
+            // 只有真的打开着配置界面时才允许修改
+            if (!(player.containerMenu instanceof ToolkitMenu menu)) {
                 return;
             }
 

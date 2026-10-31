@@ -1,0 +1,173 @@
+package com.prism.aliyastoolkit;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
+
+import io.netty.buffer.ByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.util.Mth;
+import net.minecraft.util.StringRepresentable;
+
+/**
+ * 玩家自己可配置的功能参数。
+ * <p>
+ * 通过 Data Attachment 绑定在玩家身上（见 {@link AliyasToolkit#SETTINGS}），所以：
+ * <ul>
+ * <li>每名玩家单独一份设置，互不影响</li>
+ * <li>随玩家数据一起保存，死亡重生后保留</li>
+ * <li>登录时由服务端同步给客户端，客户端界面和连锁预览都用这份数据</li>
+ * </ul>
+ * 本类是不可变对象：修改设置时用 {@code withXxx(...)} 生成新实例，再写回玩家数据。
+ */
+public record ToolkitSettings(boolean requireExactItemMatch, TriggerMode triggerMode, int chainLimit,
+        List<ChainPreset> presets, int selectedPreset) {
+    /** 连锁数量最小值。 */
+    public static final int MIN_CHAIN_LIMIT = 1;
+    /** 连锁数量最大值。 */
+    public static final int MAX_CHAIN_LIMIT = 256;
+    /** 连锁数量的默认值。 */
+    public static final int DEFAULT_CHAIN_LIMIT = 64;
+    /** 最多可以保存多少个“大量方块”预设。 */
+    public static final int MAX_PRESETS = 16;
+
+    /** 新玩家的默认设置：物品完全一致、切换触发、连锁 64 个、只有一个默认预设。 */
+    public static final ToolkitSettings DEFAULT = new ToolkitSettings(true, TriggerMode.TOGGLE, DEFAULT_CHAIN_LIMIT,
+            List.of(ChainPreset.DEFAULT), 0);
+
+    /** 存档用的编解码器（字段都带默认值，老的玩家数据也能读）。 */
+    public static final Codec<ToolkitSettings> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+                    Codec.BOOL.optionalFieldOf("require_exact_item_match", DEFAULT.requireExactItemMatch())
+                            .forGetter(ToolkitSettings::requireExactItemMatch),
+                    TriggerMode.CODEC.optionalFieldOf("chain_trigger_mode", DEFAULT.triggerMode())
+                            .forGetter(ToolkitSettings::triggerMode),
+                    Codec.INT.optionalFieldOf("chain_limit", DEFAULT_CHAIN_LIMIT)
+                            .forGetter(ToolkitSettings::chainLimit),
+                    ChainPreset.CODEC.listOf().optionalFieldOf("chain_presets", List.of(ChainPreset.DEFAULT))
+                            .forGetter(ToolkitSettings::presets),
+                    Codec.INT.optionalFieldOf("selected_preset", 0)
+                            .forGetter(ToolkitSettings::selectedPreset))
+            .apply(instance, ToolkitSettings::new));
+
+    /** 网络同步用的编解码器。 */
+    public static final StreamCodec<RegistryFriendlyByteBuf, ToolkitSettings> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.BOOL, ToolkitSettings::requireExactItemMatch,
+            TriggerMode.STREAM_CODEC, ToolkitSettings::triggerMode,
+            ByteBufCodecs.VAR_INT, ToolkitSettings::chainLimit,
+            ChainPreset.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_PRESETS)), ToolkitSettings::presets,
+            ByteBufCodecs.VAR_INT, ToolkitSettings::selectedPreset,
+            ToolkitSettings::new);
+
+    public ToolkitSettings {
+        chainLimit = Mth.clamp(chainLimit, MIN_CHAIN_LIMIT, MAX_CHAIN_LIMIT);
+
+        if (presets == null || presets.isEmpty()) {
+            presets = List.of(ChainPreset.DEFAULT);
+        } else if (presets.size() > MAX_PRESETS) {
+            presets = List.copyOf(presets.subList(0, MAX_PRESETS));
+        } else {
+            presets = List.copyOf(presets);
+        }
+
+        selectedPreset = Mth.clamp(selectedPreset, 0, presets.size() - 1);
+    }
+
+    /** 当前选中的“大量方块”预设。 */
+    public ChainPreset preset() {
+        return this.presets.get(this.selectedPreset);
+    }
+    public ToolkitSettings withRequireExactItemMatch(boolean value) {
+        return new ToolkitSettings(value, this.triggerMode, this.chainLimit, this.presets, this.selectedPreset);
+    }
+
+    public ToolkitSettings withTriggerMode(TriggerMode mode) {
+        return new ToolkitSettings(this.requireExactItemMatch, mode, this.chainLimit, this.presets, this.selectedPreset);
+    }
+
+    public ToolkitSettings withChainLimit(int limit) {
+        return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, limit, this.presets, this.selectedPreset);
+    }
+
+    /** 修改“当前预设”的内容。 */
+    public ToolkitSettings withPreset(ChainPreset preset) {
+        List<ChainPreset> copy = new ArrayList<>(this.presets);
+        copy.set(this.selectedPreset, preset);
+        return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, this.chainLimit, copy,
+                this.selectedPreset);
+    }
+
+    /** 切换到指定预设（超出范围会被夹到合法值）。 */
+    public ToolkitSettings withSelectedPreset(int index) {
+        return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, this.chainLimit, this.presets, index);
+    }
+
+    /** 复制当前预设并新建一个（达到上限时不做任何事）。 */
+    public ToolkitSettings withAddedPreset() {
+        if (this.presets.size() >= MAX_PRESETS) {
+            return this;
+        }
+        List<ChainPreset> copy = new ArrayList<>(this.presets);
+        copy.add(this.preset());
+        return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, this.chainLimit, copy,
+                copy.size() - 1);
+    }
+
+    /** 删除当前预设（至少保留 1 个）。 */
+    public ToolkitSettings withRemovedPreset() {
+        if (this.presets.size() <= 1) {
+            return this;
+        }
+        List<ChainPreset> copy = new ArrayList<>(this.presets);
+        copy.remove(this.selectedPreset);
+        return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, this.chainLimit, copy,
+                Math.min(this.selectedPreset, copy.size() - 1));
+    }
+
+    /**
+     * 连锁快捷键的触发方式。
+     */
+    public enum TriggerMode implements StringRepresentable {
+        /** 按住快捷键时连锁，松开就失效。 */
+        HOLD("hold"),
+        /** 按一下快捷键开启，再按一下关闭。 */
+        TOGGLE("toggle");
+
+        public static final Codec<TriggerMode> CODEC = StringRepresentable.fromEnum(TriggerMode::values);
+        public static final StreamCodec<ByteBuf, TriggerMode> STREAM_CODEC = ByteBufCodecs.VAR_INT
+                .map(TriggerMode::byId, TriggerMode::ordinal);
+
+        private final String name;
+
+        TriggerMode(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public String getSerializedName() {
+            return this.name;
+        }
+
+        /** 网络/存档里如果读到未知 id，就回退到默认的“切换”。 */
+        public static TriggerMode byId(int id) {
+            for (TriggerMode mode : values()) {
+                if (mode.ordinal() == id) {
+                    return mode;
+                }
+            }
+            return TOGGLE;
+        }
+
+        public TriggerMode next() {
+            return this == HOLD ? TOGGLE : HOLD;
+        }
+
+        /** 界面里显示的名字（翻译键）。 */
+        public String translationKey() {
+            return "gui.aliyastoolkit.trigger." + this.name;
+        }
+    }
+}

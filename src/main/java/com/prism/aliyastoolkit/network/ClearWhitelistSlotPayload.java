@@ -1,7 +1,7 @@
 package com.prism.aliyastoolkit.network;
 
 import com.prism.aliyastoolkit.AliyasToolkit;
-import com.prism.aliyastoolkit.menu.WhitelistMenu;
+import com.prism.aliyastoolkit.menu.ToolkitMenu;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -32,10 +32,10 @@ public record ClearWhitelistSlotPayload(int index) implements CustomPacketPayloa
             if (!(context.player() instanceof ServerPlayer player)) {
                 return;
             }
-            if (payload.index() < 0 || payload.index() >= WhitelistMenu.WHITELIST_SIZE) {
+            if (payload.index() < 0 || payload.index() >= ToolkitMenu.WHITELIST_SIZE) {
                 return;
             }
-            if (!(player.containerMenu instanceof WhitelistMenu menu)) {
+            if (!(player.containerMenu instanceof ToolkitMenu menu)) {
                 return;
             }
 
