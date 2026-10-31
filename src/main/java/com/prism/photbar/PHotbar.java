@@ -3,6 +3,7 @@ package com.prism.photbar;
 import org.slf4j.Logger;
 
 import com.mojang.logging.LogUtils;
+import com.prism.photbar.network.PHotbarNetwork;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -83,6 +84,9 @@ public class PHotbar {
 
         // Register the item to a creative tab
         modEventBus.addListener(this::addCreative);
+
+        // Register our network payloads (hotbar swap request from client to server)
+        modEventBus.addListener(PHotbarNetwork::register);
 
         // Register our mod's ModConfigSpec so that FML can create and load the config file for us
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);

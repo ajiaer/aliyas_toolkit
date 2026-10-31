@@ -34,6 +34,11 @@ public class Config {
             .comment("A list of items to log on common setup.")
             .defineListAllowEmpty("items", List.of("minecraft:iron_ingot"), () -> "", Config::validateItemName);
 
+    // 快捷栏交换功能总开关（由服务端决定是否响应客户端的交换请求）
+    public static final ModConfigSpec.BooleanValue ENABLED = BUILDER
+            .comment("Whether the hotbar swap key is allowed to swap the hotbar with the last inventory row.")
+            .define("enabled", true);
+
     static final ModConfigSpec SPEC = BUILDER.build();
 
     private static boolean validateItemName(final Object obj) {

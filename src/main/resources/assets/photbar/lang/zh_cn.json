@@ -1,0 +1,17 @@
+{
+  "itemGroup.photbar": "示例模组标签页",
+  "block.photbar.example_block": "示例方块",
+  "item.photbar.example_item": "示例物品",
+
+  "key.categories.photbar": "P-Hotbar",
+  "key.photbar.swap_hotbar": "快捷栏与背包最后一行交换",
+
+  "photbar.configuration.title": "P-Hotbar 配置",
+  "photbar.configuration.section.photbar.common.toml": "P-Hotbar 配置",
+  "photbar.configuration.section.photbar.common.toml.title": "P-Hotbar 配置",
+  "photbar.configuration.items": "物品列表",
+  "photbar.configuration.logDirtBlock": "输出泥土方块日志",
+  "photbar.configuration.magicNumberIntroduction": "魔法数字前缀文本",
+  "photbar.configuration.magicNumber": "魔法数字",
+  "photbar.configuration.enabled": "启用快捷栏交换"
+}
