@@ -3,6 +3,7 @@
   "key.aliyastoolkit.swap_hotbar": "Swap Hotbar with Last Inventory Row",
   "key.aliyastoolkit.open_toolkit": "Open Aliya's Toolkit Settings",
   "key.aliyastoolkit.chain_mine": "Chain Mining (Hold/Toggle)",
+  "key.aliyastoolkit.switch_preset": "Switch Massive-Block Preset (hold + scroll)",
 
   "gui.aliyastoolkit.toolkit.title": "Aliya's Toolkit Settings",
   "gui.aliyastoolkit.close": "Close",
@@ -48,6 +49,7 @@
 
   "message.aliyastoolkit.chain_on": "Chain Mining: ON",
   "message.aliyastoolkit.chain_off": "Chain Mining: OFF",
+  "message.aliyastoolkit.preset": "Preset %s/%s · Up %s, Down %s, Left %s, Right %s · Length %s · Lock direction: %s",
 
   "aliyastoolkit.configuration.title": "Aliya's Toolkit Configs",
   "aliyastoolkit.configuration.section.aliyastoolkit.common.toml": "Aliya's Toolkit Configs",

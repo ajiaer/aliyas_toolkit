@@ -10,9 +10,11 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import com.prism.aliyastoolkit.AliyasToolkit;
 import com.prism.aliyastoolkit.AliyasToolkitClient;
 import com.prism.aliyastoolkit.ChainMining;
+import com.prism.aliyastoolkit.ChainPreset;
 import com.prism.aliyastoolkit.Config;
 import com.prism.aliyastoolkit.ToolkitSettings;
 import com.prism.aliyastoolkit.ToolkitSettingsCache;
+import com.prism.aliyastoolkit.network.CyclePresetPayload;
 import com.prism.aliyastoolkit.network.SetChainStatePayload;
 
 import net.minecraft.client.Minecraft;
@@ -33,6 +35,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.RenderHighlightEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -191,6 +194,67 @@ public final class ChainMiningClient {
             return;
         }
         event.setCanceled(true);
+    }
+
+    /**
+     * 按住“切换预设”快捷键时，用滚轮切换大量方块的预设：
+     * 向下滚 → 下一个预设，向上滚 → 上一个预设（并阻止滚轮顺带切换快捷栏）。
+     */
+    @SubscribeEvent
+    static void onMouseScroll(InputEvent.MouseScrollingEvent event) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.screen != null || minecraft.player == null) {
+            return;
+        }
+        if (!Config.ENABLE_CHAIN_MINING.getAsBoolean()) {
+            return;
+        }
+        if (!AliyasToolkitClient.PRESET_SWITCH_KEY.isDown()) {
+            return;
+        }
+        double delta = event.getScrollDeltaY();
+        if (delta == 0.0D) {
+            return;
+        }
+
+        event.setCanceled(true);
+        switchPreset(minecraft, delta < 0.0D ? 1 : -1);
+    }
+
+    /**
+     * 切换预设：客户端先更新本地缓存（形状预览/提示立刻生效），再把请求发给服务端保存。
+     */
+    private static void switchPreset(Minecraft minecraft, int direction) {
+        ToolkitSettings settings = ToolkitSettingsCache.get();
+        int size = settings.presets().size();
+        if (size > 1) {
+            int next = CyclePresetPayload.nextIndex(settings.selectedPreset(), size, direction);
+            if (next != settings.selectedPreset()) {
+                settings = settings.withSelectedPreset(next);
+                ToolkitSettingsCache.set(settings);
+                if (NetworkRegistry.hasChannel(minecraft.getConnection().getConnection(), ConnectionProtocol.PLAY,
+                        CyclePresetPayload.TYPE.id())) {
+                    PacketDistributor.sendToServer(new CyclePresetPayload(direction));
+                }
+            }
+        }
+        // 用原版动作栏文字提示（一段时间后自动淡出）
+        if (minecraft.player != null) {
+            minecraft.player.displayClientMessage(presetMessage(settings), true);
+        }
+    }
+
+    /**
+     * 组装预设提示文字（编号 + 形状/长度/锁定方向）。
+     */
+    private static Component presetMessage(ToolkitSettings settings) {
+        ChainPreset preset = settings.preset();
+        return Component.translatable("message.aliyastoolkit.preset",
+                settings.selectedPreset() + 1, settings.presets().size(),
+                preset.up(), preset.down(), preset.left(), preset.right(), preset.length(),
+                Component.translatable(preset.lockDirection()
+                        ? "gui.aliyastoolkit.on"
+                        : "gui.aliyastoolkit.off"));
     }
 
     @SubscribeEvent

@@ -3,6 +3,7 @@
   "key.aliyastoolkit.swap_hotbar": "快捷栏与背包最后一行交换",
   "key.aliyastoolkit.open_toolkit": "打开 Aliya's Toolkit 配置",
   "key.aliyastoolkit.chain_mine": "连锁破坏（按住/切换）",
+  "key.aliyastoolkit.switch_preset": "切换大量方块预设（按住滚动滚轮）",
 
   "gui.aliyastoolkit.toolkit.title": "Aliya's Toolkit 配置",
   "gui.aliyastoolkit.close": "关闭",
@@ -48,6 +49,7 @@
 
   "message.aliyastoolkit.chain_on": "连锁破坏：开",
   "message.aliyastoolkit.chain_off": "连锁破坏：关",
+  "message.aliyastoolkit.preset": "预设 %s/%s · 上%s 下%s 左%s 右%s · 长度%s · 锁定方向：%s",
 
   "aliyastoolkit.configuration.title": "Aliya's Toolkit 配置",
   "aliyastoolkit.configuration.section.aliyastoolkit.common.toml": "Aliya's Toolkit 配置",

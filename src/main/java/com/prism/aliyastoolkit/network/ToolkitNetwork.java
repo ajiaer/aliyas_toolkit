@@ -12,7 +12,7 @@ public final class ToolkitNetwork {
      * <p>
      * NeoForge 之间连接时，双方注册的同一个包版本必须一致；修改包结构时记得把它加一。
      */
-    public static final String PROTOCOL_VERSION = "2";
+    public static final String PROTOCOL_VERSION = "3";
 
     private ToolkitNetwork() {
     }
@@ -39,6 +39,9 @@ public final class ToolkitNetwork {
         // 连锁快捷键的激活状态
         registrar.playToServer(SetChainStatePayload.TYPE, SetChainStatePayload.STREAM_CODEC,
                 SetChainStatePayload::handle);
+        // 快捷键 + 滚轮切换“大量方块”预设
+        registrar.playToServer(CyclePresetPayload.TYPE, CyclePresetPayload.STREAM_CODEC,
+                CyclePresetPayload::handle);
         // 自动补充
         registrar.playToServer(RefillHotbarPayload.TYPE, RefillHotbarPayload.STREAM_CODEC, RefillHotbarPayload::handle);
     }

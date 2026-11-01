@@ -77,6 +77,20 @@ public class AliyasToolkitClient {
             GLFW.GLFW_KEY_Z,
             KEY_CATEGORY);
 
+    /**
+     * 切换“大量方块”预设的组合键。
+     * <p>
+     * 默认 Alt + Z：按住它滚动鼠标滚轮，向下滚切换到下一个预设，向上滚切换到上一个预设。
+     * 键位可以在“选项 -> 控制 -> 按键绑定”里修改。
+     */
+    public static final KeyMapping PRESET_SWITCH_KEY = new KeyMapping(
+            "key." + AliyasToolkit.MODID + ".switch_preset",
+            KeyConflictContext.IN_GAME,
+            KeyModifier.ALT,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_Z,
+            KEY_CATEGORY);
+
     public AliyasToolkitClient(IEventBus modEventBus, ModContainer container) {
         // Allows NeoForge to create a config screen for this mod's configs.
         // The config screen is accessed by going to the Mods screen > clicking on your mod > clicking on config.
@@ -93,6 +107,7 @@ public class AliyasToolkitClient {
         event.register(SWAP_HOTBAR_KEY);
         event.register(OPEN_TOOLKIT_KEY);
         event.register(CHAIN_MINE_KEY);
+        event.register(PRESET_SWITCH_KEY);
     }
 
     private static void onRegisterMenuScreens(RegisterMenuScreensEvent event) {

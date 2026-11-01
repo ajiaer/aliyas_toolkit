@@ -40,6 +40,7 @@ Hold or toggle the chain key (default **Z**) and break a block: every connected 
 - If more than the limit is found, the blocks closest to the starting block are kept.
 - Blocks that generate in huge amounts (stone, cobblestone, granite, netherrack, dirt, ... — see the `aliyastoolkit:chain_vertical_only` block tag) use a **preset** instead: a cross-section (up/down/left/right, each 0-4) that is extruded forward by a length (1-8). For example up 2, down 2, left 0, right 1 gives a 2×5 cross-section. With the defaults (all 0, length 1) only the targeted block is broken. The shape is exact, so the chain limit does not truncate it.
 - **Allow other blocks** (default ON): inside that shape, blocks that are *not* identical to the targeted block are broken as well. Unbreakable blocks (bedrock, barrier, ...) and fluids (water, lava, ...) are always skipped. When OFF, only blocks identical to the targeted block are broken.
+- **Preset switch key** (default **Alt + Z**, configurable): hold it and scroll the mouse wheel — down switches to the next preset, up to the previous one (wrapping). The preset number and its parameters are shown as a vanilla action-bar message, which fades out automatically.
 - **Lock direction** (default OFF): ON always extrudes along the horizontal facing (even when looking up/down); OFF follows the look direction, so you can also mine straight up or down. The cross-section's "left/right/up/down" are relative to the player.
 - **Sneaking**: while sneaking the extrusion follows your look direction and may also go **45° diagonally up/down**, using the same forward-facing cross-section. This is independent of the lock direction; with lock direction OFF, straight up/down remains available as well.
 - While the chain key is active, the **outer surface of the chained blocks** is outlined. Only contour lines are drawn (edges where two faces are flat/180° and edges inside the chain are skipped, so only 90° / 270° corners show up), and the color tells you the depth: **bright white where the line is directly visible, dimmer white for parts hidden behind blocks** — so you can tell at a glance what is in front and what is behind.
@@ -59,6 +60,10 @@ Press **Alt + X** (configurable) to open the screen:
 
 The whitelist and the settings (including all presets) are attached to the **player**, so in multiplayer every player has their own values, they are stored with the player data and they survive death/respawn.
 
+### 5. On-screen hints
+- Switching presets with the preset key shows the preset number and its shape/length/lock values in the **action bar** (vanilla text overlay), which fades out automatically.
+- Switching the selected hotbar slot uses vanilla's built-in **selected item name** display; the mod does not add a second prompt.
+
 
 ## Usage
 
@@ -66,6 +71,7 @@ The whitelist and the settings (including all presets) are attached to the **pla
 | --- | --- | --- |
 | Swap hotbar ↔ last inventory row | `X` | Options → Controls → Key Binds → *Aliya's Toolkit* |
 | Chain mining (hold or toggle) | `Z` | same place |
+| Switch massive-block preset | Hold `Alt + Z` and scroll (down = next, up = previous) | same place |
 | Open the Aliya's Toolkit settings screen | `Alt + X` | same place |
 
 All keys only work in-game (not while a screen is open).
@@ -152,6 +158,7 @@ The project was bootstrapped from the [NeoForge MDK](https://github.com/NeoForge
    - 先在它周围的 3×3×3 范围内找相同方块，再以找到的方块继续找，直到找不到或达到**连锁数量**（默认 64，范围 1-256）；超出时优先保留离起点近的；
    - 石头、圆石、花岗岩、下界岩、泥土这类大量生成的方块（见 `aliyastoolkit:chain_vertical_only` 方块标签）改用**预设**：横截面（上/下/左/右，各 0-4）沿朝前方向延伸若干层（长度 1-8）。例如 上2 下2 左0 右1 得到 2×5 的横截面；默认全 0、长度 1 时只挖指向的那一格。形状是精确范围，不受“连锁数量”截断；
    - **允许其它方块**（默认开）：在这个形状范围里，除了与指向方块相同的方块，其它可破坏的方块也会一并尝试破坏；不可破坏的方块（基岩、屏障等）和流体（水、岩浆等）始终跳过。关掉则只破坏与指向方块相同的方块；
+   - **切换预设快捷键**（默认 **Alt + Z**，可改键）：按住它滚动鼠标滚轮，向下滚切换到下一个预设、向上滚切换到上一个（循环）；切换后用**原版动作栏文字**显示预设编号和参数，随后自动淡出；
    - **锁定方向**（默认关）：开——始终沿水平朝向延伸（抬头/低头也一样）；关——跟随视线，可以朝上/朝下延伸。横截面的上下左右以玩家朝向为基准；
    - **潜行**时跟随视线，还可朝**正斜向上 / 正斜向下（45°）**延伸，横截面仍是“朝向前方”时的形状，不受锁定方向影响；锁定方向关时还会额外允许朝正上/正下；
    - 连锁激活时，只给连锁方块的**外表面轮廓**画描边（隔着方块也能看到）：只画 90°/270° 的转角线，两个面平直相接（180°，例如并排的两个方块之间）以及连锁区域内部的棱都不画；
@@ -165,12 +172,18 @@ The project was bootstrapped from the [NeoForge MDK](https://github.com/NeoForge
    - 右上角有关闭按钮。
    - 白名单和设置（含所有预设）都**绑定在玩家身上**：多人游戏每人一份，随玩家数据保存，死亡重生后保留。
 
+### 屏幕提示
+
+- 用预设快捷键切换预设时，用**原版动作栏文字**显示预设编号 + 形状/长度/锁定方向，随后自动淡出；
+- 切换快捷栏物品时直接使用**原版自带的选中物品名称**提示，本模组不再额外画提示。
+
 ### 使用
 
 | 操作 | 默认按键 | 修改位置 |
 | --- | --- | --- |
 | 快捷栏 ↔ 背包最后一行交换 | `X` | 选项 → 控制 → 按键绑定 → *Aliya's Toolkit* |
 | 连锁破坏（按住/切换） | `Z` | 同上 |
+| 切换大量方块预设 | 按住 `Alt + Z` 滚动滚轮（下滚下一个，上滚上一个） | 同上 |
 | 打开 Aliya's Toolkit 配置界面 | `Alt + X` | 同上 |
 
 所有按键只在游戏内生效（打开界面时不会触发）。

@@ -333,6 +333,17 @@ public final class ChainMining {
 
 
     /**
+     * 判断方块中心是否在玩家的（连锁）可达范围内。
+     * <p>
+     * 客户端拾取是“眼睛 → 方块表面 ≤ 交互距离”，所以这里也从眼睛量到方块中心，
+     * 再留 2 格余量（方块中心最多比命中点远半条对角线，约 0.87 格）。
+     */
+    public static boolean isWithinReach(Vec3 eyePosition, Vec3 blockCenter, double interactionRange) {
+        double maxDistance = interactionRange + 2.0D;
+        return eyePosition.distanceToSqr(blockCenter) <= maxDistance * maxDistance;
+    }
+
+    /**
      * 玩家破坏方块时补破坏连锁到的方块。
      * <p>
      * 原版客户端只会破坏准星指向的那一个方块，这里在服务端把它周围连锁的方块也一起破坏。
@@ -358,9 +369,10 @@ public final class ChainMining {
         if (originState.isAir()) {
             return;
         }
-        // 简单校验一下距离（防止异常客户端让远处方块连锁），留一点余量，正常挖掘不会超过
-        double maxDistance = player.blockInteractionRange() + 2.0D;
-        if (player.distanceToSqr(Vec3.atCenterOf(origin)) > maxDistance * maxDistance) {
+        // 简单校验一下距离（防止异常客户端让远处方块连锁）。
+        // 必须从“眼睛”量：客户端拾取就是以眼睛为起点、到方块表面的距离不超过 blockInteractionRange()，
+        // 用脚的位置会少算约 1.6 格（眼高），挖正上方且刚好到极限距离时会被误判成超距。
+        if (!isWithinReach(player.getEyePosition(), Vec3.atCenterOf(origin), player.blockInteractionRange())) {
             return;
         }
 
