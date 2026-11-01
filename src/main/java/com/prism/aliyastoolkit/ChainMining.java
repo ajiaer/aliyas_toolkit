@@ -18,6 +18,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.stats.Stats;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
@@ -27,6 +28,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.GameMasterBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -402,6 +404,9 @@ public final class ChainMining {
             if (experience > 0) {
                 originBlock.popExperience(level, origin, experience);
             }
+            // 指向方块本身是原版破坏的，它的掉落物在本事件之后才生成：
+            // 等这一 tick 结束后再把那个位置上的所有掉落物合并到一起
+            scheduleDropMerge(level, origin);
         } finally {
             breakingChain = false;
         }
@@ -584,6 +589,39 @@ public final class ChainMining {
      */
     private static void spawnMergedDrops(ServerLevel level, BlockPos pos, List<ItemStack> drops) {
         for (ItemStack stack : mergeStacks(drops)) {
+            Block.popResource(level, pos, stack);
+        }
+    }
+
+    /**
+     * 在本次 tick 结束后合并 origin 位置上的掉落物。
+     * <p>
+     * 指向方块本身由原版破坏，它的掉落物在本事件之后才生成，所以这里延后一点统一合并，
+     * 避免出现“单独一个掉落物 + 连锁合并后的一大堆”分开放着的情况。
+     */
+    private static void scheduleDropMerge(ServerLevel level, BlockPos origin) {
+        level.getServer().execute(() -> mergeDroppedItems(level, origin));
+    }
+
+    /**
+     * 把指定方块位置上的掉落物合并成尽量少的堆（单堆上限遵循物品自身的最大堆叠数量），
+     * 再重新生成在同一个位置。
+     */
+    static void mergeDroppedItems(ServerLevel level, BlockPos pos) {
+        List<ItemEntity> items = level.getEntitiesOfClass(ItemEntity.class, new AABB(pos).inflate(0.75D),
+                entity -> entity.isAlive()
+                        && !entity.getItem().isEmpty()
+                        && entity.blockPosition().equals(pos));
+        if (items.size() < 2) {
+            return;
+        }
+
+        List<ItemStack> stacks = new ArrayList<>(items.size());
+        for (ItemEntity entity : items) {
+            stacks.add(entity.getItem().copy());
+            entity.discard();
+        }
+        for (ItemStack stack : mergeStacks(stacks)) {
             Block.popResource(level, pos, stack);
         }
     }

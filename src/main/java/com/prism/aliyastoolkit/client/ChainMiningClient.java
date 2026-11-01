@@ -75,7 +75,7 @@ public final class ChainMiningClient {
      * 准星指向的那个方块专用的框：纯白、更粗，会替换原版的黑框。
      */
     private static final RenderType CHAIN_OUTLINE_TARGET = createOutlineType(
-            "aliyastoolkit_chain_outline_target", RenderStateShard.LEQUAL_DEPTH_TEST, 3.0D);
+            "aliyastoolkit_chain_outline_target", RenderStateShard.LEQUAL_DEPTH_TEST, 5.0D);
 
     /** 指向方块框向外扩一点，避免和方块表面完全重合。 */
     private static final double TARGET_BOX_INFLATE = 0.002D;
