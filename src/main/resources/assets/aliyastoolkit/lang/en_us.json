@@ -41,6 +41,8 @@
   "gui.aliyastoolkit.settings.length.tooltip": "Layers to extend forward (1-8): left click +1, right click -1",
   "gui.aliyastoolkit.settings.lock_direction": "Lock Direction: %s",
   "gui.aliyastoolkit.settings.lock_direction.tooltip": "ON: horizontally forward normally; while sneaking you can also go 45 degrees up/down. OFF: straight up/down is also possible normally, and all directions are available while sneaking.",
+  "gui.aliyastoolkit.settings.allow_other_blocks": "Allow Other Blocks: %s",
+  "gui.aliyastoolkit.settings.allow_other_blocks.tooltip": "ON: inside the massive-block shape, other breakable blocks are broken as well (unbreakable blocks and fluids are skipped). OFF: only blocks identical to the targeted block are broken.",
   "gui.aliyastoolkit.trigger.hold": "Hold",
   "gui.aliyastoolkit.trigger.toggle": "Toggle",
 

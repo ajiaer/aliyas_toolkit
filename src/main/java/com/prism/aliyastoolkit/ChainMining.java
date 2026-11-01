@@ -90,7 +90,8 @@ public final class ChainMining {
     public static List<BlockPos> collectChain(BlockGetter level, BlockPos origin, BlockState originState,
             ToolkitSettings settings, Player player) {
         if (originState.is(ModBlockTags.CHAIN_VERTICAL_ONLY)) {
-            return collectShapedChain(level, origin, originState, settings.preset(), player);
+            return collectShapedChain(level, origin, originState, settings.preset(), player,
+                    settings.allowBreakingOtherBlocks());
         }
         return collectConnectedChain(level, origin, originState, settings.chainLimit());
     }
@@ -156,6 +157,24 @@ public final class ChainMining {
     }
 
     /**
+     * 形状连锁（大量方块）里允许破坏的方块。
+     * <p>
+     * 空气、流体（水/岩浆等，镐子处理不了）和不可破坏的方块（基岩、屏障等）永远跳过；
+     * 其余方块在 {@code allowOtherBlocks} 为真时都可以破坏，为假时只允许和 origin 相同的方块。
+     */
+    private static boolean isShapedCandidate(BlockGetter level, BlockPos pos, Block targetBlock,
+            boolean allowOtherBlocks) {
+        BlockState state = level.getBlockState(pos);
+        if (state.isAir() || !state.getFluidState().isEmpty()) {
+            return false;
+        }
+        if (state.getDestroySpeed(level, pos) < 0.0F) {
+            return false;
+        }
+        return allowOtherBlocks || state.getBlock() == targetBlock;
+    }
+
+    /**
      * 大量生成方块（石头/泥土/下界岩等）的“形状连锁”。
      * <p>
      * 以被挖的方块为基准，横截面由 {@code up/down/left/right}（0-4）决定（例如 上2 下2 左0 右1 = 2x5），
@@ -165,12 +184,13 @@ public final class ChainMining {
      * <li>潜行时：跟随视线，可朝前、正斜向上、正斜向下（45°，横截面仍是“朝向前方”时的形状）；
      * 锁定方向关时还会额外允许正上/正下</li>
      * </ul>
-     * 形状里只保留和 origin 相同、可破坏的方块。形状范围是精确配置的，不受“连锁数量”限制。
+     * 形状里只保留可破坏的方块（空气、流体、不可破坏的方块除外）；{@code allowOtherBlocks} 为真时
+     * 不要求与 origin 是同种方块，否则只保留和 origin 相同的方块。形状范围是精确配置的，不受“连锁数量”限制。
      */
     public static List<BlockPos> collectShapedChain(BlockGetter level, BlockPos origin, BlockState originState,
-            ChainPreset preset, Player player) {
+            ChainPreset preset, Player player, boolean allowOtherBlocks) {
         return collectShapedChain(level, origin, originState, preset, player.getDirection(),
-                selectShapeStep(preset, player));
+                selectShapeStep(preset, player), allowOtherBlocks);
     }
 
     /**
@@ -239,11 +259,12 @@ public final class ChainMining {
     /**
      * 形状连锁的实际计算（方向已经确定）。
      *
-     * @param facing 玩家的水平朝向（决定横截面的左右；正斜延伸时也作为水平分量）
-     * @param step   延伸方向
+     * @param facing           玩家的水平朝向（决定横截面的左右；正斜延伸时也作为水平分量）
+     * @param step             延伸方向
+     * @param allowOtherBlocks 是否允许破坏与 origin 不同的方块
      */
     public static List<BlockPos> collectShapedChain(BlockGetter level, BlockPos origin, BlockState originState,
-            ChainPreset preset, Direction facing, ShapeStep step) {
+            ChainPreset preset, Direction facing, ShapeStep step, boolean allowOtherBlocks) {
         Set<BlockPos> chain = new LinkedHashSet<>();
         chain.add(origin);
         if (originState.isAir()) {
@@ -283,7 +304,7 @@ public final class ChainMining {
             for (int upOffset = -preset.down(); upOffset <= preset.up(); upOffset++) {
                 for (int rightOffset = -preset.left(); rightOffset <= preset.right(); rightOffset++) {
                     BlockPos pos = base.relative(upAxis, upOffset).relative(rightAxis, rightOffset);
-                    if (pos.equals(origin) || !isChainable(level, pos, targetBlock)) {
+                    if (pos.equals(origin) || !isShapedCandidate(level, pos, targetBlock, allowOtherBlocks)) {
                         continue;
                     }
                     chain.add(pos);
@@ -352,6 +373,9 @@ public final class ChainMining {
         breakingChain = true;
         try {
             Block originBlock = originState.getBlock();
+            // 大量方块的“允许其它方块”开启时，连锁范围里与指向方块不同的方块也要破坏
+            Block expectedBlock = originState.is(ModBlockTags.CHAIN_VERTICAL_ONLY)
+                    && settings.allowBreakingOtherBlocks() ? null : originBlock;
             List<ItemStack> collectedDrops = new ArrayList<>();
             int experience = 0;
             for (BlockPos pos : chain) {
@@ -359,7 +383,7 @@ public final class ChainMining {
                 if (pos.equals(origin) || !level.isLoaded(pos)) {
                     continue;
                 }
-                experience += breakBlock(player, level, pos, originBlock, collectedDrops);
+                experience += breakBlock(player, level, pos, expectedBlock, collectedDrops);
             }
             // 所有连锁方块的掉落物合并成尽量少的堆，统一放在最开始破坏的那个方块位置
             spawnMergedDrops(level, origin, collectedDrops);
@@ -377,12 +401,13 @@ public final class ChainMining {
      * 掉落物不直接生成世界实体，而是追加到 {@code collectedDrops}，最后统一合并后再放到
      * 最开始破坏的方块位置，避免一次连锁刷出一大堆散落的物品。
      *
+     * @param expectedBlock   只允许破坏这个方块；为 {@code null} 表示任意方块都允许（大量方块的“允许其它方块”）
      * @return 这个方块掉落多少经验（创造模式/无法收获时为 0）
      */
     private static int breakBlock(ServerPlayer player, ServerLevel level, BlockPos pos, Block expectedBlock,
             List<ItemStack> collectedDrops) {
         BlockState state = level.getBlockState(pos);
-        if (state.isAir() || state.getBlock() != expectedBlock) {
+        if (state.isAir() || (expectedBlock != null && state.getBlock() != expectedBlock)) {
             return 0;
         }
         Block block = state.getBlock();

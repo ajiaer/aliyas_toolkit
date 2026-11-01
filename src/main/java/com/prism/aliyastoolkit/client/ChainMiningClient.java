@@ -17,6 +17,7 @@ import com.prism.aliyastoolkit.network.SetChainStatePayload;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderStateShard;
 import net.minecraft.client.renderer.RenderType;
@@ -24,6 +25,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.ConnectionProtocol;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
@@ -31,6 +33,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.RenderHighlightEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.registration.NetworkRegistry;
@@ -42,6 +45,7 @@ import net.neoforged.neoforge.network.registration.NetworkRegistry;
  * <li>激活时计算准星指向方块的连锁列表，并沿着连锁区域的外表面轮廓画描边
  * （只画 90°/270° 转角线，平直的 180° 棱不画）：
  * 直接看得见的部分是白色，被方块挡住的部分是暗一点的白色，方便一眼分辨前后</li>
+ * <li>指向的方块会替换掉原版黑框，改用纯白、更粗的一圈框，避免黑线压在白线上显得发暗</li>
  * </ul>
  * 真正破坏方块在服务端完成（见 {@link ChainMining}），这里只负责按键和显示。
  */
@@ -56,15 +60,25 @@ public final class ChainMiningClient {
      * 被遮挡部分的描边：关闭深度测试，所以隔着方块也能看到（先画这一层）。
      */
     private static final RenderType CHAIN_OUTLINE_BEHIND = createOutlineType(
-            "aliyastoolkit_chain_outline_behind", RenderStateShard.NO_DEPTH_TEST);
+            "aliyastoolkit_chain_outline_behind", RenderStateShard.NO_DEPTH_TEST, 2.0D);
 
     /**
      * 可以直接看到的部分的描边：正常深度测试，被方块挡住的部分不会画到（后画，盖住上面那一层）。
      */
     private static final RenderType CHAIN_OUTLINE_FRONT = createOutlineType(
-            "aliyastoolkit_chain_outline_front", RenderStateShard.LEQUAL_DEPTH_TEST);
+            "aliyastoolkit_chain_outline_front", RenderStateShard.LEQUAL_DEPTH_TEST, 2.0D);
 
-    private static RenderType createOutlineType(String name, RenderStateShard.DepthTestStateShard depthTest) {
+    /**
+     * 准星指向的那个方块专用的框：纯白、更粗，会替换原版的黑框。
+     */
+    private static final RenderType CHAIN_OUTLINE_TARGET = createOutlineType(
+            "aliyastoolkit_chain_outline_target", RenderStateShard.LEQUAL_DEPTH_TEST, 3.0D);
+
+    /** 指向方块框向外扩一点，避免和方块表面完全重合。 */
+    private static final double TARGET_BOX_INFLATE = 0.002D;
+
+    private static RenderType createOutlineType(String name, RenderStateShard.DepthTestStateShard depthTest,
+            double lineWidth) {
         return RenderType.create(
                 name,
                 DefaultVertexFormat.POSITION_COLOR_NORMAL,
@@ -74,7 +88,7 @@ public final class ChainMiningClient {
                 false,
                 RenderType.CompositeState.builder()
                         .setShaderState(RenderStateShard.RENDERTYPE_LINES_SHADER)
-                        .setLineState(new RenderStateShard.LineStateShard(OptionalDouble.of(2.0)))
+                        .setLineState(new RenderStateShard.LineStateShard(OptionalDouble.of(lineWidth)))
                         .setLayeringState(RenderStateShard.VIEW_OFFSET_Z_LAYERING)
                         .setTransparencyState(RenderStateShard.TRANSLUCENT_TRANSPARENCY)
                         .setDepthTestState(depthTest)
@@ -86,6 +100,9 @@ public final class ChainMiningClient {
 
     /** 当前要显示的白边线段（由连锁方块外表面的转角棱组成）。 */
     private static List<ChainMining.OutlineEdge> preview = List.of();
+
+    /** 准星当前指向的方块（连锁激活时用于替换原版黑框）。 */
+    private static BlockPos targetPos;
 
     /** “切换”模式下是否已经打开连锁。 */
     private static boolean toggled;
@@ -107,6 +124,7 @@ public final class ChainMiningClient {
             // 加载/换维度时先不画白边；这里不要清空按键和同步状态，
             // 否则会出现“客户端以为关了、服务端还开着”的失步
             preview = List.of();
+            targetPos = null;
             return;
         }
 
@@ -143,19 +161,42 @@ public final class ChainMiningClient {
         // 计算白边预览：以准星指向的方块为中心（原版的拾取已经按挖掘/交互距离算好了）
         if (!active || !(minecraft.hitResult instanceof BlockHitResult hitResult)) {
             preview = List.of();
+            targetPos = null;
             return;
         }
         BlockPos origin = hitResult.getBlockPos();
         BlockState originState = minecraft.level.getBlockState(origin);
-        preview = originState.isAir()
-                ? List.of()
-                : ChainMining.collectOutlineEdges(
-                        ChainMining.collectChain(minecraft.level, origin, originState, settings, player));
+        if (originState.isAir()) {
+            preview = List.of();
+            targetPos = null;
+            return;
+        }
+
+        // 记住指向的方块：渲染时会用它替换原版的黑框
+        targetPos = origin.immutable();
+        preview = ChainMining.collectOutlineEdges(
+                ChainMining.collectChain(minecraft.level, origin, originState, settings, player));
+    }
+
+    /**
+     * 连锁激活且有方块指向时，取消原版的黑框，改由我们自己画纯白的框
+     * （原版黑框在描边之后绘制，会盖住白线，让指向的方块看起来发暗）。
+     */
+    @SubscribeEvent
+    static void onRenderHighlight(RenderHighlightEvent.Block event) {
+        if (!active || !Config.ENABLE_CHAIN_MINING.getAsBoolean() || targetPos == null) {
+            return;
+        }
+        if (!event.getTarget().getBlockPos().equals(targetPos)) {
+            return;
+        }
+        event.setCanceled(true);
     }
 
     @SubscribeEvent
     static void onRenderLevel(RenderLevelStageEvent event) {
-        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_BLOCK_ENTITIES || preview.isEmpty()) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_BLOCK_ENTITIES
+                || (preview.isEmpty() && targetPos == null)) {
             return;
         }
 
@@ -181,6 +222,14 @@ public final class ChainMiningClient {
             renderEdge(poseStack, front, edge, 1.0F, 1.0F, 1.0F);
         }
         buffers.endBatch(CHAIN_OUTLINE_FRONT);
+
+        // 指向的方块：纯白、更粗的一圈框（原版黑框已在 RenderHighlightEvent 里取消）
+        if (targetPos != null) {
+            VertexConsumer target = buffers.getBuffer(CHAIN_OUTLINE_TARGET);
+            LevelRenderer.renderLineBox(poseStack, target, new AABB(targetPos).inflate(TARGET_BOX_INFLATE),
+                    1.0F, 1.0F, 1.0F, 1.0F);
+            buffers.endBatch(CHAIN_OUTLINE_TARGET);
+        }
 
         poseStack.popPose();
     }
@@ -241,6 +290,7 @@ public final class ChainMiningClient {
 
     private static void reset() {
         preview = List.of();
+        targetPos = null;
         active = false;
         lastSentActive = false;
         toggled = false;

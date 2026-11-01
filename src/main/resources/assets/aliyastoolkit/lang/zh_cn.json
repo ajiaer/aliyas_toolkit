@@ -41,6 +41,8 @@
   "gui.aliyastoolkit.settings.length.tooltip": "沿朝向前方延伸的层数（1-8）：左键 +1，右键 -1",
   "gui.aliyastoolkit.settings.lock_direction": "锁定方向：%s",
   "gui.aliyastoolkit.settings.lock_direction.tooltip": "开：平时水平朝前，潜行时可朝前/正斜上/正斜下；关：平时也可朝上/朝下，潜行时以上方向都能选",
+  "gui.aliyastoolkit.settings.allow_other_blocks": "允许其它方块：%s",
+  "gui.aliyastoolkit.settings.allow_other_blocks.tooltip": "开：大量方块的连锁范围里，其它可破坏的方块也会一并尝试破坏（不可破坏的方块和流体除外）；关：只破坏与指向方块相同的方块",
   "gui.aliyastoolkit.trigger.hold": "按住",
   "gui.aliyastoolkit.trigger.toggle": "切换",
 

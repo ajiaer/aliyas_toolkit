@@ -64,13 +64,14 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private Button shapeRightButton;
     private Button lengthButton;
     private Button lockDirectionButton;
+    private Button allowOtherBlocksButton;
 
     public ToolkitScreen(ToolkitMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
         this.imageWidth = 260;
-        this.imageHeight = 226;
+        this.imageHeight = 242;
         this.inventoryLabelX = 49;
-        this.inventoryLabelY = 136;
+        this.inventoryLabelY = 152;
     }
 
     @Override
@@ -165,6 +166,14 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.lock_direction.tooltip")))
                 .build());
 
+        // 大量方块：是否连范围里“其它”方块也一起破坏
+        this.allowOtherBlocksButton = this.addRenderableWidget(Button
+                .builder(Component.empty(), button -> this.applySettings(
+                        this.settings.withAllowBreakingOtherBlocks(!this.settings.allowBreakingOtherBlocks())))
+                .bounds(x + SETTINGS_X, y + 132, SETTINGS_WIDTH, 14)
+                .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.allow_other_blocks.tooltip")))
+                .build());
+
         this.updateButtonLabels();
     }
 
@@ -183,7 +192,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         guiGraphics.fill(left + this.imageWidth - 1, top, left + this.imageWidth, top + this.imageHeight, BORDER_COLOR);
 
         // 左右两栏之间的分隔线
-        guiGraphics.fill(left + 78, top + 16, left + 79, top + 128, BORDER_COLOR);
+        guiGraphics.fill(left + 78, top + 16, left + 79, top + 151, BORDER_COLOR);
 
         // 每个格子画一个凹槽
         for (Slot slot : this.menu.slots) {
@@ -321,6 +330,9 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         this.lengthButton.setMessage(Component.translatable("gui.aliyastoolkit.settings.length", preset.length()));
         this.lockDirectionButton.setMessage(Component.translatable("gui.aliyastoolkit.settings.lock_direction",
                 onOff(preset.lockDirection())));
+        this.allowOtherBlocksButton.setMessage(Component.translatable(
+                "gui.aliyastoolkit.settings.allow_other_blocks",
+                onOff(this.settings.allowBreakingOtherBlocks())));
 
         // 预设数量到上限/下限时把按钮变灰
         this.presetAddButton.active = this.settings.presets().size() < ToolkitSettings.MAX_PRESETS;

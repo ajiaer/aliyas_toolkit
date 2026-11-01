@@ -25,7 +25,7 @@ import net.minecraft.util.StringRepresentable;
  * 本类是不可变对象：修改设置时用 {@code withXxx(...)} 生成新实例，再写回玩家数据。
  */
 public record ToolkitSettings(boolean requireExactItemMatch, TriggerMode triggerMode, int chainLimit,
-        List<ChainPreset> presets, int selectedPreset) {
+        List<ChainPreset> presets, int selectedPreset, boolean allowBreakingOtherBlocks) {
     /** 连锁数量最小值。 */
     public static final int MIN_CHAIN_LIMIT = 1;
     /** 连锁数量最大值。 */
@@ -35,9 +35,9 @@ public record ToolkitSettings(boolean requireExactItemMatch, TriggerMode trigger
     /** 最多可以保存多少个“大量方块”预设。 */
     public static final int MAX_PRESETS = 16;
 
-    /** 新玩家的默认设置：物品完全一致、切换触发、连锁 64 个、只有一个默认预设。 */
+    /** 新玩家的默认设置：物品完全一致、切换触发、连锁 64 个、只有一个默认预设、允许破坏其它方块。 */
     public static final ToolkitSettings DEFAULT = new ToolkitSettings(true, TriggerMode.TOGGLE, DEFAULT_CHAIN_LIMIT,
-            List.of(ChainPreset.DEFAULT), 0);
+            List.of(ChainPreset.DEFAULT), 0, true);
 
     /** 存档用的编解码器（字段都带默认值，老的玩家数据也能读）。 */
     public static final Codec<ToolkitSettings> CODEC = RecordCodecBuilder.create(instance -> instance.group(
@@ -50,7 +50,9 @@ public record ToolkitSettings(boolean requireExactItemMatch, TriggerMode trigger
                     ChainPreset.CODEC.listOf().optionalFieldOf("chain_presets", List.of(ChainPreset.DEFAULT))
                             .forGetter(ToolkitSettings::presets),
                     Codec.INT.optionalFieldOf("selected_preset", 0)
-                            .forGetter(ToolkitSettings::selectedPreset))
+                            .forGetter(ToolkitSettings::selectedPreset),
+                    Codec.BOOL.optionalFieldOf("allow_breaking_other_blocks", true)
+                            .forGetter(ToolkitSettings::allowBreakingOtherBlocks))
             .apply(instance, ToolkitSettings::new));
 
     /** 网络同步用的编解码器。 */
@@ -60,6 +62,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, TriggerMode trigger
             ByteBufCodecs.VAR_INT, ToolkitSettings::chainLimit,
             ChainPreset.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_PRESETS)), ToolkitSettings::presets,
             ByteBufCodecs.VAR_INT, ToolkitSettings::selectedPreset,
+            ByteBufCodecs.BOOL, ToolkitSettings::allowBreakingOtherBlocks,
             ToolkitSettings::new);
 
     public ToolkitSettings {
@@ -80,16 +83,26 @@ public record ToolkitSettings(boolean requireExactItemMatch, TriggerMode trigger
     public ChainPreset preset() {
         return this.presets.get(this.selectedPreset);
     }
+
     public ToolkitSettings withRequireExactItemMatch(boolean value) {
-        return new ToolkitSettings(value, this.triggerMode, this.chainLimit, this.presets, this.selectedPreset);
+        return new ToolkitSettings(value, this.triggerMode, this.chainLimit, this.presets, this.selectedPreset,
+                this.allowBreakingOtherBlocks);
     }
 
     public ToolkitSettings withTriggerMode(TriggerMode mode) {
-        return new ToolkitSettings(this.requireExactItemMatch, mode, this.chainLimit, this.presets, this.selectedPreset);
+        return new ToolkitSettings(this.requireExactItemMatch, mode, this.chainLimit, this.presets, this.selectedPreset,
+                this.allowBreakingOtherBlocks);
     }
 
     public ToolkitSettings withChainLimit(int limit) {
-        return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, limit, this.presets, this.selectedPreset);
+        return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, limit, this.presets, this.selectedPreset,
+                this.allowBreakingOtherBlocks);
+    }
+
+    /** 大量方块的连锁范围里是否也破坏“非指向”的方块。 */
+    public ToolkitSettings withAllowBreakingOtherBlocks(boolean value) {
+        return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, this.chainLimit, this.presets,
+                this.selectedPreset, value);
     }
 
     /** 修改“当前预设”的内容。 */
@@ -97,12 +110,13 @@ public record ToolkitSettings(boolean requireExactItemMatch, TriggerMode trigger
         List<ChainPreset> copy = new ArrayList<>(this.presets);
         copy.set(this.selectedPreset, preset);
         return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, this.chainLimit, copy,
-                this.selectedPreset);
+                this.selectedPreset, this.allowBreakingOtherBlocks);
     }
 
     /** 切换到指定预设（超出范围会被夹到合法值）。 */
     public ToolkitSettings withSelectedPreset(int index) {
-        return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, this.chainLimit, this.presets, index);
+        return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, this.chainLimit, this.presets, index,
+                this.allowBreakingOtherBlocks);
     }
 
     /** 复制当前预设并新建一个（达到上限时不做任何事）。 */
@@ -113,7 +127,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, TriggerMode trigger
         List<ChainPreset> copy = new ArrayList<>(this.presets);
         copy.add(this.preset());
         return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, this.chainLimit, copy,
-                copy.size() - 1);
+                copy.size() - 1, this.allowBreakingOtherBlocks);
     }
 
     /** 删除当前预设（至少保留 1 个）。 */
@@ -124,7 +138,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, TriggerMode trigger
         List<ChainPreset> copy = new ArrayList<>(this.presets);
         copy.remove(this.selectedPreset);
         return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, this.chainLimit, copy,
-                Math.min(this.selectedPreset, copy.size() - 1));
+                Math.min(this.selectedPreset, copy.size() - 1), this.allowBreakingOtherBlocks);
     }
 
     /**

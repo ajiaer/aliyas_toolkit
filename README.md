@@ -39,9 +39,11 @@ Hold or toggle the chain key (default **Z**) and break a block: every connected 
 - From there the game looks at the 3×3×3 area around it, then continues from every matching block it found (26-way connectivity), until nothing matches or the **chain limit** (default 64, range 1-256) is reached.
 - If more than the limit is found, the blocks closest to the starting block are kept.
 - Blocks that generate in huge amounts (stone, cobblestone, granite, netherrack, dirt, ... — see the `aliyastoolkit:chain_vertical_only` block tag) use a **preset** instead: a cross-section (up/down/left/right, each 0-4) that is extruded forward by a length (1-8). For example up 2, down 2, left 0, right 1 gives a 2×5 cross-section. With the defaults (all 0, length 1) only the targeted block is broken. The shape is exact, so the chain limit does not truncate it.
+- **Allow other blocks** (default ON): inside that shape, blocks that are *not* identical to the targeted block are broken as well. Unbreakable blocks (bedrock, barrier, ...) and fluids (water, lava, ...) are always skipped. When OFF, only blocks identical to the targeted block are broken.
 - **Lock direction** (default OFF): ON always extrudes along the horizontal facing (even when looking up/down); OFF follows the look direction, so you can also mine straight up or down. The cross-section's "left/right/up/down" are relative to the player.
 - **Sneaking**: while sneaking the extrusion follows your look direction and may also go **45° diagonally up/down**, using the same forward-facing cross-section. This is independent of the lock direction; with lock direction OFF, straight up/down remains available as well.
 - While the chain key is active, the **outer surface of the chained blocks** is outlined. Only contour lines are drawn (edges where two faces are flat/180° and edges inside the chain are skipped, so only 90° / 270° corners show up), and the color tells you the depth: **bright white where the line is directly visible, dimmer white for parts hidden behind blocks** — so you can tell at a glance what is in front and what is behind.
+- The block under the crosshair is highlighted with a **thicker pure-white frame**: while chain mining is active the vanilla black selection box is replaced (otherwise that black line is drawn on top of our outline and makes the targeted block look dark).
 - All drops (and experience) are collected at the position of the first block and merged into as few stacks as possible (each stack follows the item's normal max stack size). Every chained block costs tool durability exactly like mining it by hand.
 - Without the chain key active nothing changes; with the feature disabled in the mod config nothing changes either.
 
@@ -89,6 +91,7 @@ Per-player settings (in the in-game screen):
 | Shape Up/Down/Left/Right | `0` (range 0-4) | Cross-section extension relative to the targeted block and the player's facing. |
 | Length | `1` (range 1-8) | How many layers the cross-section is extruded forward. |
 | Lock Direction | `OFF` | `ON`: horizontally forward normally, 45° up/down while sneaking. `OFF`: straight up/down is also possible normally; while sneaking all directions (forward / 45° up / 45° down / straight up / straight down) are available. |
+| Allow Other Blocks | `ON` | Inside the massive-block shape, other breakable blocks are broken too. Unbreakable blocks and fluids are always skipped. |
 
 
 ## Multiplayer
@@ -148,10 +151,12 @@ The project was bootstrapped from the [NeoForge MDK](https://github.com/NeoForge
    - 以准星指向的方块为起点（距离和原版挖掘/交互距离一致）；
    - 先在它周围的 3×3×3 范围内找相同方块，再以找到的方块继续找，直到找不到或达到**连锁数量**（默认 64，范围 1-256）；超出时优先保留离起点近的；
    - 石头、圆石、花岗岩、下界岩、泥土这类大量生成的方块（见 `aliyastoolkit:chain_vertical_only` 方块标签）改用**预设**：横截面（上/下/左/右，各 0-4）沿朝前方向延伸若干层（长度 1-8）。例如 上2 下2 左0 右1 得到 2×5 的横截面；默认全 0、长度 1 时只挖指向的那一格。形状是精确范围，不受“连锁数量”截断；
+   - **允许其它方块**（默认开）：在这个形状范围里，除了与指向方块相同的方块，其它可破坏的方块也会一并尝试破坏；不可破坏的方块（基岩、屏障等）和流体（水、岩浆等）始终跳过。关掉则只破坏与指向方块相同的方块；
    - **锁定方向**（默认关）：开——始终沿水平朝向延伸（抬头/低头也一样）；关——跟随视线，可以朝上/朝下延伸。横截面的上下左右以玩家朝向为基准；
    - **潜行**时跟随视线，还可朝**正斜向上 / 正斜向下（45°）**延伸，横截面仍是“朝向前方”时的形状，不受锁定方向影响；锁定方向关时还会额外允许朝正上/正下；
    - 连锁激活时，只给连锁方块的**外表面轮廓**画描边（隔着方块也能看到）：只画 90°/270° 的转角线，两个面平直相接（180°，例如并排的两个方块之间）以及连锁区域内部的棱都不画；
    - 描边颜色区分前后：**直接看得见的部分是白色，被方块挡住的部分是暗一点的白色**，一眼就能看出哪条线在前面、哪条在后面；
+   - 指向的方块用**更粗的纯白框**标出：连锁激活期间会替换原版的黑框（原版黑框在描边之后绘制，会盖住白线让指向方块显得发暗）；
    - 掉落物都收集到最开始那个方块的位置，并**合并成尽量少的堆**（单堆上限遵循游戏规定的最大堆叠数量），经验也集中在同一处；每个方块都会像手动挖一样正常扣耐久；
    - 不按快捷键时完全不影响原版玩法；模组配置里关掉连锁破坏后也不会触发。
 4. **Aliya's Toolkit 配置界面** —— 按 `Alt + X`（可改键）打开：
@@ -191,6 +196,7 @@ The project was bootstrapped from the [NeoForge MDK](https://github.com/NeoForge
 | 形状 上/下/左/右 | `0`（0-4） | 以指向的方块为基准、以玩家朝向描述的横截面延伸格数。 |
 | 长度 | `1`（1-8） | 横截面沿朝前方向延伸的层数。 |
 | 锁定方向 | 关 | 开：平时水平朝前，潜行时可朝前/正斜上/正斜下；关：平时也可朝正上/正下，潜行时前/正斜上/正斜下/正上/正下都可选。 |
+| 允许其它方块 | 开 | 大量方块的形状范围里，其它可破坏的方块也一并破坏；不可破坏的方块和流体始终跳过。 |
 
 
 ### 多人游戏

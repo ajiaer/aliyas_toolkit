@@ -28,8 +28,8 @@ public class ToolkitMenu extends AbstractContainerMenu {
     public static final int WHITELIST_Y = 48;
     /** 玩家背包格子左上角坐标（相对 GUI）。 */
     public static final int INVENTORY_X = 49;
-    public static final int INVENTORY_Y = 146;
-    public static final int HOTBAR_Y = 204;
+    public static final int INVENTORY_Y = 162;
+    public static final int HOTBAR_Y = 220;
 
     private final Container whitelist;
 
