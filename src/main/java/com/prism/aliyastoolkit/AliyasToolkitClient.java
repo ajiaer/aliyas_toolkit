@@ -67,26 +67,12 @@ public class AliyasToolkitClient {
     /**
      * 连锁破坏的快捷键。
      * <p>
-     * 默认 Z。按“按住”还是“切换”使用由玩家自己的设置决定（见 {@code ToolkitSettings.TriggerMode}），
-     * 配置界面里可以修改，键位本身可以在“选项 -> 控制 -> 按键绑定”里修改。
+     * 默认 Z。固定为“切换”：按一下开启，再按一下关闭；按住它滚动滚轮可以切换“大量方块”预设。
+     * 键位可以在“选项 -> 控制 -> 按键绑定”里修改。
      */
     public static final KeyMapping CHAIN_MINE_KEY = new KeyMapping(
             "key." + AliyasToolkit.MODID + ".chain_mine",
             KeyConflictContext.IN_GAME,
-            InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_Z,
-            KEY_CATEGORY);
-
-    /**
-     * 切换“大量方块”预设的组合键。
-     * <p>
-     * 默认 Alt + Z：按住它滚动鼠标滚轮，向下滚切换到下一个预设，向上滚切换到上一个预设。
-     * 键位可以在“选项 -> 控制 -> 按键绑定”里修改。
-     */
-    public static final KeyMapping PRESET_SWITCH_KEY = new KeyMapping(
-            "key." + AliyasToolkit.MODID + ".switch_preset",
-            KeyConflictContext.IN_GAME,
-            KeyModifier.ALT,
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_Z,
             KEY_CATEGORY);
@@ -107,7 +93,6 @@ public class AliyasToolkitClient {
         event.register(SWAP_HOTBAR_KEY);
         event.register(OPEN_TOOLKIT_KEY);
         event.register(CHAIN_MINE_KEY);
-        event.register(PRESET_SWITCH_KEY);
     }
 
     private static void onRegisterMenuScreens(RegisterMenuScreensEvent event) {
@@ -135,7 +120,7 @@ public class AliyasToolkitClient {
         while (SWAP_HOTBAR_KEY.consumeClick()) {
             trySwap(minecraft);
         }
-        // 连锁快捷键由 ChainMiningClient 处理（按住/切换两种模式，并且要同步给服务端）
+        // 连锁快捷键由 ChainMiningClient 处理（固定切换模式，并且要同步给服务端）
     }
 
     private static void trySwap(Minecraft minecraft) {

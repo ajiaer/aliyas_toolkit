@@ -11,8 +11,9 @@ public final class ToolkitNetwork {
      * 网络协议版本。
      * <p>
      * NeoForge 之间连接时，双方注册的同一个包版本必须一致；修改包结构时记得把它加一。
+     * 4：去掉了连锁触发方式（固定为切换），设置的同步结构随之变化。
      */
-    public static final String PROTOCOL_VERSION = "3";
+    public static final String PROTOCOL_VERSION = "4";
 
     private ToolkitNetwork() {
     }

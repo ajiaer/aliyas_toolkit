@@ -17,6 +17,7 @@ import com.prism.aliyastoolkit.ToolkitSettingsCache;
 import com.prism.aliyastoolkit.network.CyclePresetPayload;
 import com.prism.aliyastoolkit.network.SetChainStatePayload;
 
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.LevelRenderer;
@@ -41,10 +42,12 @@ import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.registration.NetworkRegistry;
 
+import org.lwjgl.glfw.GLFW;
+
 /**
  * 客户端的连锁破坏表现：
  * <ul>
- * <li>处理连锁快捷键（按住/切换），并把“当前是否激活”同步给服务端</li>
+ * <li>处理连锁快捷键（固定为切换：按一下开、再按一下关），并把“当前是否激活”同步给服务端</li>
  * <li>激活时计算准星指向方块的连锁列表，并沿着连锁区域的外表面轮廓画描边
  * （只画 90°/270° 转角线，平直的 180° 棱不画）：
  * 直接看得见的部分是白色，被方块挡住的部分是暗一点的白色，方便一眼分辨前后</li>
@@ -110,6 +113,12 @@ public final class ChainMiningClient {
     /** “切换”模式下是否已经打开连锁。 */
     private static boolean toggled;
 
+    /** 连锁键当前是否处于“按下还没松开”的状态（由原始按键事件维护）。 */
+    private static boolean chainKeyHeld;
+
+    /** 这一次按住期间是否滚动过滚轮（滚动 = 在切预设，松开时就不再切换开关）。 */
+    private static boolean scrolledWhileHeld;
+
     /** 当前是否处于连锁激活状态。 */
     private static boolean active;
 
@@ -131,10 +140,10 @@ public final class ChainMiningClient {
             return;
         }
 
-        // 按下的那一次（长按不会重复触发）；无论哪种模式都要把队列清空
-        boolean pressed = false;
+        // 连锁键的“按下/松开”在 onKeyInput / onMouseButton 里按原始事件处理（真正的 keydown / keyup）。
+        // 原版 KeyMapping.consumeClick() 在按住时会随按键重复（GLFW_REPEAT）反复返回 true，
+        // 用它无法区分“短按”和“按住 + 滚轮”，所以这里只把点击队列清空，避免残留。
         while (AliyasToolkitClient.CHAIN_MINE_KEY.consumeClick()) {
-            pressed = true;
         }
 
         ToolkitSettings settings = ToolkitSettingsCache.get();
@@ -146,16 +155,9 @@ public final class ChainMiningClient {
 
         if (!usable) {
             active = false;
-        } else if (settings.triggerMode() == ToolkitSettings.TriggerMode.HOLD) {
-            // 按住：按下时激活，松开就失效
-            active = AliyasToolkitClient.CHAIN_MINE_KEY.isDown();
+            chainKeyHeld = false;
+            scrolledWhileHeld = false;
         } else {
-            // 切换：按一下开，再按一下关
-            if (pressed) {
-                toggled = !toggled;
-                player.displayClientMessage(Component.translatable(
-                        toggled ? "message.aliyastoolkit.chain_on" : "message.aliyastoolkit.chain_off"), true);
-            }
             active = toggled;
         }
 
@@ -169,7 +171,8 @@ public final class ChainMiningClient {
         }
         BlockPos origin = hitResult.getBlockPos();
         BlockState originState = minecraft.level.getBlockState(origin);
-        if (originState.isAir()) {
+        // 空气和液体方块（水、岩浆等）无法破坏：不画目标框，也不画连锁预览
+        if (originState.isAir() || ChainMining.isFluidBlock(originState)) {
             preview = List.of();
             targetPos = null;
             return;
@@ -197,8 +200,85 @@ public final class ChainMiningClient {
     }
 
     /**
-     * 按住“切换预设”快捷键时，用滚轮切换大量方块的预设：
-     * 向下滚 → 下一个预设，向上滚 → 上一个预设（并阻止滚轮顺带切换快捷栏）。
+     * 连锁键的 keydown / keyup（键盘）。
+     * <p>
+     * 原版的 {@link KeyMapping#consumeClick()} 在按住时会随按键重复（GLFW_REPEAT）不断返回 true，
+     * 没法区分“短按”和“按住”；这里直接监听原始按键事件：
+     * <ul>
+     * <li>keydown：只记录开始按住，并清空“这一按期间滚过滚轮”的标记；</li>
+     * <li>keyup：这一按期间没滚过滚轮才切换连锁开关；滚过滚轮（= 在切预设）就不切换。</li>
+     * </ul>
+     */
+    @SubscribeEvent
+    static void onKeyInput(InputEvent.Key event) {
+        KeyMapping chainKey = AliyasToolkitClient.CHAIN_MINE_KEY;
+        if (!chainKey.matches(event.getKey(), event.getScanCode())) {
+            return;
+        }
+
+        if (event.getAction() == GLFW.GLFW_PRESS) {
+            Minecraft minecraft = Minecraft.getInstance();
+            // isDown() 会同时检查改键后的修饰键与按键冲突上下文
+            onChainKeyDown(minecraft.screen == null && chainKey.isDown());
+        } else if (event.getAction() == GLFW.GLFW_RELEASE) {
+            onChainKeyUp(Minecraft.getInstance());
+        }
+        // GLFW_REPEAT 忽略：按住不放不应该算作新的按下
+    }
+
+    /** 连锁键被改到鼠标按键时（玩家自己改键），同样按 keydown / keyup 处理。 */
+    @SubscribeEvent
+    static void onMouseButton(InputEvent.MouseButton.Pre event) {
+        if (!AliyasToolkitClient.CHAIN_MINE_KEY.matchesMouse(event.getButton())) {
+            return;
+        }
+
+        if (event.getAction() == GLFW.GLFW_PRESS) {
+            onChainKeyDown(Minecraft.getInstance().screen == null);
+        } else if (event.getAction() == GLFW.GLFW_RELEASE) {
+            onChainKeyUp(Minecraft.getInstance());
+        }
+    }
+
+    /** keydown：开始一次“按住”，并清空滚轮标记。 */
+    private static void onChainKeyDown(boolean active) {
+        chainKeyHeld = active;
+        scrolledWhileHeld = false;
+    }
+
+    /** keyup：这次按住期间没滚过滚轮才切换连锁开关。 */
+    private static void onChainKeyUp(Minecraft minecraft) {
+        boolean toggle = chainKeyHeld && !scrolledWhileHeld;
+        chainKeyHeld = false;
+        scrolledWhileHeld = false;
+        if (toggle) {
+            toggleChain(minecraft);
+        }
+    }
+
+    /** 切换连锁开关（只在游戏内、功能可用时生效）。 */
+    private static void toggleChain(Minecraft minecraft) {
+        LocalPlayer player = minecraft.player;
+        if (player == null || minecraft.screen != null) {
+            return;
+        }
+        if (!Config.ENABLE_CHAIN_MINING.getAsBoolean()
+                || !player.isAlive()
+                || player.isDeadOrDying()
+                || player.isSpectator()) {
+            return;
+        }
+
+        toggled = !toggled;
+        player.displayClientMessage(Component.translatable(
+                toggled ? "message.aliyastoolkit.chain_on" : "message.aliyastoolkit.chain_off"), true);
+    }
+
+    /**
+     * 按住连锁快捷键（默认 Z）时，用滚轮切换大量方块的预设：
+     * 向下滚 → 下一个预设，向上滚 → 上一个预设；到两端就停住，不会循环（并阻止滚轮顺带切换快捷栏）。
+     * <p>
+     * 这一次按住期间只要滚动过滚轮，就认为玩家是在“长按切预设”，松开时不再切换连锁开关。
      */
     @SubscribeEvent
     static void onMouseScroll(InputEvent.MouseScrollingEvent event) {
@@ -209,7 +289,7 @@ public final class ChainMiningClient {
         if (!Config.ENABLE_CHAIN_MINING.getAsBoolean()) {
             return;
         }
-        if (!AliyasToolkitClient.PRESET_SWITCH_KEY.isDown()) {
+        if (!AliyasToolkitClient.CHAIN_MINE_KEY.isDown()) {
             return;
         }
         double delta = event.getScrollDeltaY();
@@ -218,6 +298,7 @@ public final class ChainMiningClient {
         }
 
         event.setCanceled(true);
+        scrolledWhileHeld = true;
         switchPreset(minecraft, delta < 0.0D ? 1 : -1);
     }
 
@@ -358,6 +439,8 @@ public final class ChainMiningClient {
         active = false;
         lastSentActive = false;
         toggled = false;
+        chainKeyHeld = false;
+        scrolledWhileHeld = false;
     }
 
 }

@@ -1,5 +1,8 @@
 package com.prism.aliyastoolkit.client;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.prism.aliyastoolkit.AliyasToolkitClient;
 import com.prism.aliyastoolkit.ChainPreset;
 import com.prism.aliyastoolkit.ToolkitSettings;
@@ -11,10 +14,13 @@ import com.prism.aliyastoolkit.network.SetWhitelistSlotPayload;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
@@ -26,11 +32,18 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * <p>
  * 布局：标题栏（右上角是关闭按钮）；
  * <ul>
- * <li>左侧（自动补充）：补充物品是否需要完全一致 + 3x3 物品白名单</li>
- * <li>右侧（连锁破坏）：触发方式、连锁数量，以及只对石头/泥土这类大量方块生效的
- * 预设（横截面 + 长度 + 锁定方向）</li>
- * <li>下方：玩家的背包与快捷栏</li>
+ * <li>左侧：3 个功能按钮（物品切换 / 自动补充 / 连锁破坏），点哪个右边就显示哪个功能的内容</li>
+ * <li>右侧：当前功能的内容区，默认显示第一个功能（物品切换）</li>
+ * <li>玩家背包与快捷栏只在“自动补充”页显示（用来设置白名单）</li>
  * </ul>
+ * 各功能页的内容：
+ * <ul>
+ * <li>物品切换：功能说明文字</li>
+ * <li>自动补充：补充物品是否需要完全一致 + 3x3 物品白名单</li>
+ * <li>连锁破坏：连锁数量（左键 +1、右键 -1），以及只对石头/泥土这类大量方块生效的
+ * 预设（横截面 + 长度 + 锁定方向）</li>
+ * </ul>
+ * 白名单格子和玩家背包/快捷栏只属于“自动补充”页：切到别的功能页时它们不绘制、也不响应鼠标。
  * 白名单格子：左键设置为当前拿着的物品（不消耗），右键清空。
  * 带加号/减号的按钮：左键 +1，右键 -1。
  */
@@ -40,19 +53,63 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private static final int SLOT_COLOR = 0xFF8B8B8B;
     private static final int TEXT_COLOR = 0x404040;
     private static final int HINT_COLOR = 0xFF555555;
+    /** 当前功能按钮的高亮色。 */
+    private static final int ACCENT_COLOR = 0xFF3A7D32;
+
+    /** 左侧功能按钮栏。 */
+    private static final int TAB_X = 8;
+    private static final int TAB_TOP = 26;
+    private static final int TAB_WIDTH = 68;
+    private static final int TAB_HEIGHT = 18;
+    private static final int TAB_GAP = 4;
+    /** 左侧按钮栏与右侧内容区之间的分隔线。 */
+    private static final int DIVIDER_X = 80;
+    /** 分隔线底部留的空白，避免直接顶到面板边框。 */
+    private static final int DIVIDER_BOTTOM_GAP = 8;
 
     /** 右侧设置区。 */
     private static final int SETTINGS_X = 88;
     private static final int SETTINGS_RIGHT = 252;
     private static final int SETTINGS_WIDTH = SETTINGS_RIGHT - SETTINGS_X;
+    /** 右侧内容区的水平中心（白名单、提示文字居中用）。 */
+    private static final int SETTINGS_CENTER_X = (SETTINGS_X + SETTINGS_RIGHT) / 2;
+
+    /** 自动补充页：白名单标题、提示的纵坐标。 */
+    private static final int WHITELIST_HEADING_Y = 50;
+    private static final int WHITELIST_HINT_Y = 120;
+
+    /** 物品切换页：说明文字的纵坐标。 */
+    private static final int HOTBAR_DESC_Y = 34;
+
+    /** 连锁破坏页：各行的纵坐标。 */
+    private static final int CHAIN_LIMIT_Y = 30;
+    private static final int CHAIN_MASSIVE_LABEL_Y = 58;
+    private static final int CHAIN_PRESET_Y = 72;
+    /** 大量方块：上 / 左·长度·右 / 下，十字排列。 */
+    private static final int CHAIN_SHAPE_Y = 92;
+    private static final int CHAIN_SHAPE_ROW_HEIGHT = 20;
+    private static final int CHAIN_SHAPE_BUTTON_WIDTH = 38;
+    /** 十字排列的三列（相对 GUI 的 x，整体在内容区居中）。 */
+    private static final int CHAIN_SHAPE_LEFT_X = 107;
+    private static final int CHAIN_SHAPE_CENTER_X = 151;
+    private static final int CHAIN_SHAPE_RIGHT_X = 195;
+    /** 锁定方向、允许其它方块各占一整行。 */
+    private static final int CHAIN_LOCK_Y = 152;
+    private static final int CHAIN_ALLOW_OTHER_Y = 172;
+    private static final int CHAIN_HINT_Y = 196;
 
     /** 当前界面里的设置（和客户端缓存保持同步）。 */
     private ToolkitSettings settings = ToolkitSettingsCache.get();
 
+    /** 当前选中的功能页，默认第一个（物品切换）。 */
+    private Feature activeFeature = Feature.HOTBAR_SWAP;
+
+    /** 各功能页的按钮，切换功能页时整组显示/隐藏。 */
+    private final List<AbstractWidget> autoRefillWidgets = new ArrayList<>();
+    private final List<AbstractWidget> chainMiningWidgets = new ArrayList<>();
+
     private Button exactMatchButton;
-    private Button triggerModeButton;
-    private Button chainLimitMinusButton;
-    private Button chainLimitPlusButton;
+    private Button chainLimitButton;
     private Button presetPrevButton;
     private Button presetNameButton;
     private Button presetNextButton;
@@ -70,7 +127,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         super(menu, playerInventory, title);
         this.imageWidth = 260;
         this.imageHeight = 242;
-        this.inventoryLabelX = 49;
+        this.inventoryLabelX = ToolkitMenu.INVENTORY_X;
         this.inventoryLabelY = 152;
     }
 
@@ -78,6 +135,10 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     protected void init() {
         super.init();
         this.settings = ToolkitSettingsCache.get();
+
+        // init 在窗口大小变化、从别的界面返回时会再次调用，先清空上一次的分组
+        this.autoRefillWidgets.clear();
+        this.chainMiningWidgets.clear();
 
         int x = this.leftPos;
         int y = this.topPos;
@@ -88,93 +149,125 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.close")))
                 .build());
 
+        // 左侧：3 个功能按钮，点击后右边显示对应功能的内容
+        Feature[] features = Feature.values();
+        for (int i = 0; i < features.length; i++) {
+            Feature feature = features[i];
+            this.addRenderableWidget(new FeatureButton(
+                    x + TAB_X, y + TAB_TOP + i * (TAB_HEIGHT + TAB_GAP), TAB_WIDTH, TAB_HEIGHT,
+                    feature, pressed -> this.selectFeature(feature)));
+        }
+
         // 自动补充：补充物品是否完全一致（放在白名单上方）
-        this.exactMatchButton = this.addRenderableWidget(Button
+        this.exactMatchButton = this.addToGroup(Button
                 .builder(Component.empty(), button -> this.applySettings(
                         this.settings.withRequireExactItemMatch(!this.settings.requireExactItemMatch())))
-                .bounds(x + 14, y + 18, 64, 14)
+                .bounds(x + SETTINGS_X, y + 30, SETTINGS_WIDTH, 14)
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.exact_match.tooltip")))
-                .build());
+                .build(), this.autoRefillWidgets);
 
-        // 连锁破坏：触发方式
-        this.triggerModeButton = this.addRenderableWidget(Button
-                .builder(Component.empty(), button -> this.applySettings(
-                        this.settings.withTriggerMode(this.settings.triggerMode().next())))
-                .bounds(x + SETTINGS_X, y + 28, 100, 14)
-                .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.trigger_mode.tooltip",
-                        AliyasToolkitClient.CHAIN_MINE_KEY.getTranslatedKeyMessage())))
-                .build());
-
-        // 连锁破坏：连锁数量（左键/右键按钮）
-        this.chainLimitMinusButton = this.addRenderableWidget(new StepperButton(
-                x + SETTINGS_X, y + 46, 14, 14, Component.literal("-"),
-                Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.chain_limit.minus")),
-                () -> this.changeChainLimit(-1), () -> this.changeChainLimit(1)));
-        this.chainLimitPlusButton = this.addRenderableWidget(new StepperButton(
-                x + SETTINGS_RIGHT - 14, y + 46, 14, 14, Component.literal("+"),
-                Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.chain_limit.plus")),
-                () -> this.changeChainLimit(1), () -> this.changeChainLimit(-1)));
+        // 连锁破坏：连锁数量（左键 +1、右键 -1，按住 Shift 步进 16）
+        this.chainLimitButton = this.addToGroup(new StepperButton(
+                x + SETTINGS_X, y + CHAIN_LIMIT_Y, SETTINGS_WIDTH, 14, Component.empty(),
+                Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.chain_limit.tooltip")),
+                () -> this.changeChainLimit(1), () -> this.changeChainLimit(-1)), this.chainMiningWidgets);
 
         // 大量方块：预设选择 / 新建 / 删除
-        this.presetPrevButton = this.addRenderableWidget(Button
+        this.presetPrevButton = this.addToGroup(Button
                 .builder(Component.literal("<"), button -> this.selectRelativePreset(-1))
-                .bounds(x + SETTINGS_X, y + 78, 14, 14)
+                .bounds(x + SETTINGS_X, y + CHAIN_PRESET_Y, 14, 14)
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.preset.previous")))
-                .build());
-        this.presetNameButton = this.addRenderableWidget(Button
+                .build(), this.chainMiningWidgets);
+        this.presetNameButton = this.addToGroup(Button
                 .builder(Component.empty(), button -> this.selectRelativePreset(1))
-                .bounds(x + 104, y + 78, 68, 14)
-                .build());
-        this.presetNextButton = this.addRenderableWidget(Button
+                .bounds(x + 104, y + CHAIN_PRESET_Y, 68, 14)
+                .build(), this.chainMiningWidgets);
+        this.presetNextButton = this.addToGroup(Button
                 .builder(Component.literal(">"), button -> this.selectRelativePreset(1))
-                .bounds(x + 174, y + 78, 14, 14)
+                .bounds(x + 174, y + CHAIN_PRESET_Y, 14, 14)
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.preset.next")))
-                .build());
-        this.presetAddButton = this.addRenderableWidget(Button
+                .build(), this.chainMiningWidgets);
+        this.presetAddButton = this.addToGroup(Button
                 .builder(Component.translatable("gui.aliyastoolkit.settings.preset.add"),
                         button -> this.applySettings(this.settings.withAddedPreset()))
-                .bounds(x + 190, y + 78, 28, 14)
+                .bounds(x + 190, y + CHAIN_PRESET_Y, 28, 14)
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.preset.add.tooltip")))
-                .build());
-        this.presetDeleteButton = this.addRenderableWidget(Button
+                .build(), this.chainMiningWidgets);
+        this.presetDeleteButton = this.addToGroup(Button
                 .builder(Component.translatable("gui.aliyastoolkit.settings.preset.delete"),
                         button -> this.applySettings(this.settings.withRemovedPreset()))
-                .bounds(x + 220, y + 78, 28, 14)
+                .bounds(x + 220, y + CHAIN_PRESET_Y, 28, 14)
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.preset.delete.tooltip")))
-                .build());
+                .build(), this.chainMiningWidgets);
 
-        // 大量方块：横截面（上/下/左/右，0-4）
-        this.shapeUpButton = this.addRenderableWidget(this.createShapeButton(
-                x + SETTINGS_X, y + 96, "gui.aliyastoolkit.settings.shape.up", 0));
-        this.shapeDownButton = this.addRenderableWidget(this.createShapeButton(
-                x + SETTINGS_X + 42, y + 96, "gui.aliyastoolkit.settings.shape.down", 1));
-        this.shapeLeftButton = this.addRenderableWidget(this.createShapeButton(
-                x + SETTINGS_X + 84, y + 96, "gui.aliyastoolkit.settings.shape.left", 2));
-        this.shapeRightButton = this.addRenderableWidget(this.createShapeButton(
-                x + SETTINGS_X + 126, y + 96, "gui.aliyastoolkit.settings.shape.right", 3));
-
-        // 大量方块：延伸长度（1-8）、锁定方向
-        this.lengthButton = this.addRenderableWidget(new StepperButton(
-                x + SETTINGS_X, y + 114, 64, 14, Component.empty(),
+        // 大量方块：十字排列（上 / 左·长度·右 / 下）
+        this.shapeUpButton = this.addToGroup(this.createShapeButton(
+                x + CHAIN_SHAPE_CENTER_X, y + CHAIN_SHAPE_Y,
+                "gui.aliyastoolkit.settings.shape.up", 0), this.chainMiningWidgets);
+        this.shapeLeftButton = this.addToGroup(this.createShapeButton(
+                x + CHAIN_SHAPE_LEFT_X, y + CHAIN_SHAPE_Y + CHAIN_SHAPE_ROW_HEIGHT,
+                "gui.aliyastoolkit.settings.shape.left", 2), this.chainMiningWidgets);
+        this.lengthButton = this.addToGroup(new StepperButton(
+                x + CHAIN_SHAPE_CENTER_X, y + CHAIN_SHAPE_Y + CHAIN_SHAPE_ROW_HEIGHT,
+                CHAIN_SHAPE_BUTTON_WIDTH, 14, Component.empty(),
                 Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.length.tooltip")),
-                () -> this.changePresetLength(1), () -> this.changePresetLength(-1)));
-        this.lockDirectionButton = this.addRenderableWidget(Button
+                () -> this.changePresetLength(1), () -> this.changePresetLength(-1)), this.chainMiningWidgets);
+        this.shapeRightButton = this.addToGroup(this.createShapeButton(
+                x + CHAIN_SHAPE_RIGHT_X, y + CHAIN_SHAPE_Y + CHAIN_SHAPE_ROW_HEIGHT,
+                "gui.aliyastoolkit.settings.shape.right", 3), this.chainMiningWidgets);
+        this.shapeDownButton = this.addToGroup(this.createShapeButton(
+                x + CHAIN_SHAPE_CENTER_X, y + CHAIN_SHAPE_Y + CHAIN_SHAPE_ROW_HEIGHT * 2,
+                "gui.aliyastoolkit.settings.shape.down", 1), this.chainMiningWidgets);
+
+        // 锁定方向、允许其它方块：各占一整行
+        this.lockDirectionButton = this.addToGroup(Button
                 .builder(Component.empty(), button -> this.applySettings(
                         this.settings.withPreset(this.settings.preset()
                                 .withLockDirection(!this.settings.preset().lockDirection()))))
-                .bounds(x + 156, y + 114, 96, 14)
+                .bounds(x + SETTINGS_X, y + CHAIN_LOCK_Y, SETTINGS_WIDTH, 14)
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.lock_direction.tooltip")))
-                .build());
-
-        // 大量方块：是否连范围里“其它”方块也一起破坏
-        this.allowOtherBlocksButton = this.addRenderableWidget(Button
+                .build(), this.chainMiningWidgets);
+        this.allowOtherBlocksButton = this.addToGroup(Button
                 .builder(Component.empty(), button -> this.applySettings(
                         this.settings.withAllowBreakingOtherBlocks(!this.settings.allowBreakingOtherBlocks())))
-                .bounds(x + SETTINGS_X, y + 132, SETTINGS_WIDTH, 14)
+                .bounds(x + SETTINGS_X, y + CHAIN_ALLOW_OTHER_Y, SETTINGS_WIDTH, 14)
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.allow_other_blocks.tooltip")))
-                .build());
+                .build(), this.chainMiningWidgets);
 
         this.updateButtonLabels();
+        this.updateFeatureVisibility();
+    }
+
+    /** 注册按钮，并按功能页分组（切页时整组显示/隐藏）。 */
+    private <T extends AbstractWidget> T addToGroup(T widget, List<AbstractWidget> group) {
+        this.addRenderableWidget(widget);
+        group.add(widget);
+        return widget;
+    }
+
+    /** 点击左侧功能按钮：右边换成这个功能的内容。 */
+    private void selectFeature(Feature feature) {
+        if (this.activeFeature == feature) {
+            return;
+        }
+        this.activeFeature = feature;
+        this.updateFeatureVisibility();
+    }
+
+    /** 只显示当前功能页的按钮；白名单格子和玩家背包/快捷栏也只属于“自动补充”页。 */
+    private void updateFeatureVisibility() {
+        setGroupVisible(this.autoRefillWidgets, this.activeFeature == Feature.AUTO_REFILL);
+        setGroupVisible(this.chainMiningWidgets, this.activeFeature == Feature.CHAIN_MINING);
+
+        boolean autoRefill = this.activeFeature == Feature.AUTO_REFILL;
+        this.menu.setWhitelistVisible(autoRefill);
+        this.menu.setInventoryVisible(autoRefill);
+    }
+
+    private static void setGroupVisible(List<AbstractWidget> group, boolean visible) {
+        for (AbstractWidget widget : group) {
+            widget.visible = visible;
+        }
     }
 
 
@@ -191,11 +284,19 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         guiGraphics.fill(left, top, left + 1, top + this.imageHeight, BORDER_COLOR);
         guiGraphics.fill(left + this.imageWidth - 1, top, left + this.imageWidth, top + this.imageHeight, BORDER_COLOR);
 
-        // 左右两栏之间的分隔线
-        guiGraphics.fill(left + 78, top + 16, left + 79, top + 151, BORDER_COLOR);
+        // 左侧功能按钮与右侧内容区之间的分隔线：一直画到接近底部（底部留一点空白，视觉上更舒服）
+        guiGraphics.fill(left + DIVIDER_X, top + 16, left + DIVIDER_X + 1,
+                top + this.imageHeight - DIVIDER_BOTTOM_GAP, BORDER_COLOR);
 
-        // 每个格子画一个凹槽
+        // 当前功能：按钮左边画一条竖着的强调条
+        int accentY = top + TAB_TOP + this.activeFeature.ordinal() * (TAB_HEIGHT + TAB_GAP);
+        guiGraphics.fill(left + TAB_X - 4, accentY, left + TAB_X - 2, accentY + TAB_HEIGHT, ACCENT_COLOR);
+
+        // 每个（当前可见的）格子画一个凹槽；白名单格子不在“自动补充”页时不画
         for (Slot slot : this.menu.slots) {
+            if (!slot.isActive()) {
+                continue;
+            }
             int slotX = left + slot.x;
             int slotY = top + slot.y;
             guiGraphics.fill(slotX - 1, slotY - 1, slotX + 17, slotY + 17, BORDER_COLOR);
@@ -208,34 +309,70 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         // 标题
         guiGraphics.drawString(this.font, this.title, 8, 6, TEXT_COLOR, false);
 
-        // 左栏：自动补充（完全一致 + 白名单）
-        guiGraphics.drawString(this.font, Component.translatable("gui.aliyastoolkit.group.whitelist"), 14, 38,
-                TEXT_COLOR, false);
-        guiGraphics.drawString(this.font, Component.translatable("gui.aliyastoolkit.whitelist.hint.set"), 14, 107,
-                HINT_COLOR, false);
-        guiGraphics.drawString(this.font, Component.translatable("gui.aliyastoolkit.whitelist.hint.clear"), 14, 117,
-                HINT_COLOR, false);
+        // 右侧：当前功能页的内容
+        switch (this.activeFeature) {
+            case HOTBAR_SWAP -> this.renderHotbarSwapLabels(guiGraphics);
+            case AUTO_REFILL -> this.renderAutoRefillLabels(guiGraphics);
+            case CHAIN_MINING -> this.renderChainMiningLabels(guiGraphics);
+        }
 
-        // 右栏：连锁破坏
-        guiGraphics.drawString(this.font, Component.translatable("gui.aliyastoolkit.group.chain"), SETTINGS_X, 18,
-                TEXT_COLOR, false);
+        // 下方：玩家背包（只在“自动补充”页显示，用来往白名单里放物品）
+        if (this.menu.isInventoryVisible()) {
+            guiGraphics.drawString(this.font, this.playerInventoryTitle, this.inventoryLabelX, this.inventoryLabelY,
+                    TEXT_COLOR, false);
+        }
+    }
 
-        // 连锁数量的数值（两个按钮中间）
-        Component chainLimit = Component.translatable("gui.aliyastoolkit.settings.chain_limit",
-                this.settings.chainLimit());
-        int chainLimitCenter = (SETTINGS_X + 14 + SETTINGS_RIGHT - 14) / 2;
-        guiGraphics.drawString(this.font, chainLimit, chainLimitCenter - this.font.width(chainLimit) / 2, 49,
-                TEXT_COLOR, false);
+    /** 物品切换页的文字：只保留功能说明。 */
+    private void renderHotbarSwapLabels(GuiGraphics guiGraphics) {
+        this.drawContentTitle(guiGraphics);
+        this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.hotbar_swap.description"),
+                SETTINGS_X, HOTBAR_DESC_Y, TEXT_COLOR);
+    }
+
+    /** 自动补充页的文字（白名单标题 + 操作提示）。 */
+    private void renderAutoRefillLabels(GuiGraphics guiGraphics) {
+        this.drawContentTitle(guiGraphics);
+
+        Component heading = Component.translatable("gui.aliyastoolkit.group.whitelist");
+        guiGraphics.drawString(this.font, heading, SETTINGS_CENTER_X - this.font.width(heading) / 2,
+                WHITELIST_HEADING_Y, TEXT_COLOR, false);
+
+        this.drawCentered(guiGraphics, Component.translatable("gui.aliyastoolkit.whitelist.hint.set"),
+                WHITELIST_HINT_Y, HINT_COLOR);
+        this.drawCentered(guiGraphics, Component.translatable("gui.aliyastoolkit.whitelist.hint.clear"),
+                WHITELIST_HINT_Y + 10, HINT_COLOR);
+    }
+
+    /** 连锁破坏页的文字。 */
+    private void renderChainMiningLabels(GuiGraphics guiGraphics) {
+        this.drawContentTitle(guiGraphics);
 
         // 大量方块（只对石头、泥土、下界岩等生效）
         guiGraphics.drawString(this.font, Component.translatable("gui.aliyastoolkit.group.massive_blocks"),
-                SETTINGS_X, 66, TEXT_COLOR, false);
+                SETTINGS_X, CHAIN_MASSIVE_LABEL_Y, TEXT_COLOR, false);
 
-        // 下方：玩家背包
-        guiGraphics.drawString(this.font, this.playerInventoryTitle, this.inventoryLabelX, this.inventoryLabelY,
-                TEXT_COLOR, false);
+        // 提示：按住连锁键滚动滚轮切换预设（不循环 / 不切换开关）
+        this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.settings.chain.preset_hint",
+                AliyasToolkitClient.CHAIN_MINE_KEY.getTranslatedKeyMessage()), SETTINGS_X, CHAIN_HINT_Y, HINT_COLOR);
     }
 
+    private void drawContentTitle(GuiGraphics guiGraphics) {
+        guiGraphics.drawString(this.font, this.activeFeature.label(), SETTINGS_X, 18, TEXT_COLOR, false);
+    }
+
+    private void drawCentered(GuiGraphics guiGraphics, Component text, int y, int color) {
+        guiGraphics.drawString(this.font, text, SETTINGS_CENTER_X - this.font.width(text) / 2, y, color, false);
+    }
+
+    /** 按内容区宽度自动换行绘制，返回下一行的纵坐标。 */
+    private int drawWrapped(GuiGraphics guiGraphics, Component text, int x, int y, int color) {
+        for (FormattedCharSequence line : this.font.split(text, SETTINGS_WIDTH)) {
+            guiGraphics.drawString(this.font, line, x, y, color, false);
+            y += this.font.lineHeight + 2;
+        }
+        return y;
+    }
 
     @Override
     protected void slotClicked(Slot slot, int slotId, int mouseButton, ClickType type) {
@@ -269,6 +406,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         PacketDistributor.sendToServer(new SetToolkitSettingsPayload(updated));
     }
 
+    /** 连锁数量：左键 +1、右键 -1；按住 Shift 时一次 16。 */
     private void changeChainLimit(int direction) {
         int step = hasShiftDown() ? 16 : 1;
         this.applySettings(this.settings.withChainLimit(this.settings.chainLimit() + direction * step));
@@ -291,13 +429,16 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         this.applySettings(this.settings.withPreset(preset.withLength(preset.length() + delta)));
     }
 
+    /** 在当前预设的基础上前后移动；到两端就停住，不会循环。 */
     private void selectRelativePreset(int direction) {
         int count = this.settings.presets().size();
         if (count <= 1) {
             return;
         }
-        int index = Math.floorMod(this.settings.selectedPreset() + direction, count);
-        this.applySettings(this.settings.withSelectedPreset(index));
+        int index = Mth.clamp(this.settings.selectedPreset() + (direction >= 0 ? 1 : -1), 0, count - 1);
+        if (index != this.settings.selectedPreset()) {
+            this.applySettings(this.settings.withSelectedPreset(index));
+        }
     }
 
     private StepperButton createShapeButton(int x, int y, String labelKey, int side) {
@@ -312,8 +453,8 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
 
         this.exactMatchButton.setMessage(Component.translatable("gui.aliyastoolkit.settings.exact_match",
                 onOff(this.settings.requireExactItemMatch())));
-        this.triggerModeButton.setMessage(Component.translatable("gui.aliyastoolkit.settings.trigger_mode",
-                Component.translatable(this.settings.triggerMode().translationKey())));
+        this.chainLimitButton.setMessage(Component.translatable("gui.aliyastoolkit.settings.chain_limit",
+                this.settings.chainLimit()));
 
         this.presetNameButton.setMessage(Component.translatable("gui.aliyastoolkit.settings.preset.name",
                 this.settings.selectedPreset() + 1, this.settings.presets().size()));
@@ -334,14 +475,17 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 "gui.aliyastoolkit.settings.allow_other_blocks",
                 onOff(this.settings.allowBreakingOtherBlocks())));
 
-        // 预设数量到上限/下限时把按钮变灰
+        // 预设数量到上限/下限时把按钮变灰；到两端时把上一页/下一页按钮变灰（不循环）
         this.presetAddButton.active = this.settings.presets().size() < ToolkitSettings.MAX_PRESETS;
         this.presetDeleteButton.active = this.settings.presets().size() > 1;
+        this.presetPrevButton.active = this.settings.selectedPreset() > 0;
+        this.presetNextButton.active = this.settings.selectedPreset() < this.settings.presets().size() - 1;
     }
 
     private static Component onOff(boolean value) {
         return Component.translatable(value ? "gui.aliyastoolkit.on" : "gui.aliyastoolkit.off");
     }
+
 
     /**
      * 左键执行 {@code onLeftClick}、右键执行 {@code onRightClick} 的按钮（普通 Button 只认左键）。
@@ -378,4 +522,47 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         }
     }
 
+    /** 左侧的功能按钮：当前选中时画一圈绿色内边框。 */
+    private final class FeatureButton extends Button {
+        private final Feature feature;
+
+        private FeatureButton(int x, int y, int width, int height, Feature feature, Button.OnPress onPress) {
+            super(x, y, width, height, feature.label(), onPress, DEFAULT_NARRATION);
+            this.feature = feature;
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+            super.renderWidget(guiGraphics, mouseX, mouseY, partialTick);
+            if (ToolkitScreen.this.activeFeature != this.feature) {
+                return;
+            }
+            int left = this.getX();
+            int top = this.getY();
+            int right = left + this.getWidth();
+            int bottom = top + this.getHeight();
+            guiGraphics.fill(left, top, right, top + 1, ACCENT_COLOR);
+            guiGraphics.fill(left, bottom - 1, right, bottom, ACCENT_COLOR);
+            guiGraphics.fill(left, top, left + 1, bottom, ACCENT_COLOR);
+            guiGraphics.fill(right - 1, top, right, bottom, ACCENT_COLOR);
+        }
+    }
+
+    /** 左侧功能按钮对应的三个功能页（顺序就是按钮从上到下的顺序）。 */
+    private enum Feature {
+        HOTBAR_SWAP("gui.aliyastoolkit.tab.hotbar_swap"),
+        AUTO_REFILL("gui.aliyastoolkit.tab.auto_refill"),
+        CHAIN_MINING("gui.aliyastoolkit.tab.chain_mining");
+
+        private final String translationKey;
+
+        Feature(String translationKey) {
+            this.translationKey = translationKey;
+        }
+
+        private Component label() {
+            return Component.translatable(this.translationKey);
+        }
+    }
 }
+

@@ -26,6 +26,7 @@ import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.GameMasterBlock;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -81,7 +82,8 @@ public final class ChainMining {
     }
 
     /**
-     * 从 {@code origin} 开始收集连锁破坏的方块列表（第一个元素一定是 origin 本身）。
+     * 从 {@code origin} 开始收集连锁破坏的方块列表（第一个元素是 origin 本身；
+     * 如果 origin 是空气或液体方块、无法破坏，则返回空列表）。
      * <p>
      * 石头、泥土、下界岩这类大量生成的方块（{@link ModBlockTags#CHAIN_VERTICAL_ONLY}）使用玩家当前选中的
      * {@link ChainPreset}（横截面 + 延伸长度）计算，见 {@link #collectShapedChain}；
@@ -102,13 +104,18 @@ public final class ChainMining {
      * 普通方块的连锁：从 origin 开始，在 3x3x3 范围内找相同方块，再以找到的方块为中心继续找。
      * <p>
      * 最多 {@code maxBlocks} 个（包含 origin 本身）；超出时优先保留离 origin 近的。
+     * 空气、流体（水、岩浆等，无法破坏）和不可破坏的方块不会进入连锁列表，因此也不会出现在预览描边里。
      */
     public static List<BlockPos> collectConnectedChain(BlockGetter level, BlockPos origin, BlockState originState,
             int maxBlocks) {
         int limit = Mth.clamp(maxBlocks, ToolkitSettings.MIN_CHAIN_LIMIT, ToolkitSettings.MAX_CHAIN_LIMIT);
         List<BlockPos> chain = new ArrayList<>(limit);
+        // 空气和液体方块（水、岩浆等）无法破坏，也不参与连锁与预览
+        if (originState.isAir() || isFluidBlock(originState)) {
+            return chain;
+        }
         chain.add(origin);
-        if (limit <= 1 || originState.isAir()) {
+        if (limit <= 1) {
             return chain;
         }
 
@@ -145,9 +152,19 @@ public final class ChainMining {
         return chain;
     }
 
+    /**
+     * 是否是液体方块本身（水、岩浆等）。
+     * <p>
+     * 只排除液体方块；含水方块（waterlogged，例如含水楼梯）本身是可破坏的方块，不算流体。
+     */
+    public static boolean isFluidBlock(BlockState state) {
+        return state.getBlock() instanceof LiquidBlock;
+    }
+
     private static boolean isChainable(BlockGetter level, BlockPos pos, Block targetBlock) {
         BlockState state = level.getBlockState(pos);
-        if (state.isAir() || state.getBlock() != targetBlock) {
+        // 流体（水、岩浆等）无法破坏，不参与连锁预览
+        if (state.isAir() || isFluidBlock(state) || state.getBlock() != targetBlock) {
             return false;
         }
         // 箱子之类带方块实体的方块不参与连锁，避免一次挖掉一整排箱子
@@ -167,10 +184,7 @@ public final class ChainMining {
     private static boolean isShapedCandidate(BlockGetter level, BlockPos pos, Block targetBlock,
             boolean allowOtherBlocks) {
         BlockState state = level.getBlockState(pos);
-        if (state.isAir() || !state.getFluidState().isEmpty()) {
-            return false;
-        }
-        if (state.getDestroySpeed(level, pos) < 0.0F) {
+        if (state.isAir() || isFluidBlock(state) || state.getDestroySpeed(level, pos) < 0.0F) {
             return false;
         }
         return allowOtherBlocks || state.getBlock() == targetBlock;
@@ -268,10 +282,11 @@ public final class ChainMining {
     public static List<BlockPos> collectShapedChain(BlockGetter level, BlockPos origin, BlockState originState,
             ChainPreset preset, Direction facing, ShapeStep step, boolean allowOtherBlocks) {
         Set<BlockPos> chain = new LinkedHashSet<>();
-        chain.add(origin);
-        if (originState.isAir()) {
+        // 空气和液体方块（水、岩浆等）无法破坏，也不参与连锁与预览
+        if (originState.isAir() || isFluidBlock(originState)) {
             return new ArrayList<>(chain);
         }
+        chain.add(origin);
 
         Block targetBlock = originState.getBlock();
         Direction rightAxis = facing.getClockWise(Direction.Axis.Y);
@@ -424,7 +439,9 @@ public final class ChainMining {
     private static int breakBlock(ServerPlayer player, ServerLevel level, BlockPos pos, Block expectedBlock,
             List<ItemStack> collectedDrops) {
         BlockState state = level.getBlockState(pos);
-        if (state.isAir() || (expectedBlock != null && state.getBlock() != expectedBlock)) {
+        // 空气和液体方块（水、岩浆等）无法破坏，直接跳过
+        if (state.isAir() || isFluidBlock(state)
+                || (expectedBlock != null && state.getBlock() != expectedBlock)) {
             return 0;
         }
         Block block = state.getBlock();

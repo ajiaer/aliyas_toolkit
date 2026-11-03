@@ -15,8 +15,8 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 /**
  * 客户端 -> 服务端：连锁快捷键当前是“激活”还是“未激活”。
  * <p>
- * “按住”和“切换”两种触发方式都由客户端换算成同一个布尔值：按下/切换开启时发 true，
- * 松开/切换关闭时发 false。服务端据此决定玩家挖方块时要不要连锁，所以没按快捷键时完全不会触发。
+ * 连锁固定为“切换”：按一下开启时发 true，再按一下关闭时发 false。
+ * 服务端据此决定玩家挖方块时要不要连锁，所以没开启时完全不会触发。
  */
 public record SetChainStatePayload(boolean active) implements CustomPacketPayload {
     public static final Type<SetChainStatePayload> TYPE = new Type<>(

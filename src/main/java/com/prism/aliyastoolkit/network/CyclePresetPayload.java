@@ -13,9 +13,9 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
- * 客户端 -> 服务端：切换“大量方块”的预设（快捷键 + 滚轮时使用）。
+ * 客户端 -> 服务端：切换“大量方块”的预设（按住连锁快捷键滚动滚轮时使用）。
  * <p>
- * {@code direction} 大于 0 表示下一个预设，小于 0 表示上一个；到末尾会循环。
+ * {@code direction} 大于 0 表示下一个预设，小于 0 表示上一个；到两端就停住，不会循环。
  * 服务端修改后会把完整设置同步回客户端（{@link SyncToolkitSettingsPayload}）。
  */
 public record CyclePresetPayload(int direction) implements CustomPacketPayload {
@@ -32,7 +32,7 @@ public record CyclePresetPayload(int direction) implements CustomPacketPayload {
     }
 
     /**
-     * 计算切换后的预设索引（循环）。
+     * 计算切换后的预设索引（不循环：已经在两端时保持不变）。
      *
      * @param current   当前索引
      * @param size      预设数量
@@ -42,7 +42,8 @@ public record CyclePresetPayload(int direction) implements CustomPacketPayload {
         if (size <= 1) {
             return 0;
         }
-        return Math.floorMod(current + (direction >= 0 ? 1 : -1), size);
+        int next = current + (direction >= 0 ? 1 : -1);
+        return Math.max(0, Math.min(next, size - 1));
     }
 
     public static void handle(CyclePresetPayload payload, IPayloadContext context) {
@@ -54,8 +55,10 @@ public record CyclePresetPayload(int direction) implements CustomPacketPayload {
             int size = settings.presets().size();
             if (size > 1) {
                 int next = nextIndex(settings.selectedPreset(), size, payload.direction());
-                settings = settings.withSelectedPreset(next);
-                player.setData(AliyasToolkit.SETTINGS, settings);
+                if (next != settings.selectedPreset()) {
+                    settings = settings.withSelectedPreset(next);
+                    player.setData(AliyasToolkit.SETTINGS, settings);
+                }
             }
             PacketDistributor.sendToPlayer(player, new SyncToolkitSettingsPayload(settings));
         });

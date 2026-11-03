@@ -14,24 +14,33 @@ import net.minecraft.world.item.ItemStack;
 /**
  * “Aliya's Toolkit 配置”界面的容器菜单。
  * <p>
- * 布局：左侧 3x3 物品白名单（0-8），右侧是连锁破坏/自动补充的设置按钮（画在界面上，不是格子），
- * 下方是玩家的背包 3 行 + 快捷栏（9-44）。没有人物/装备/合成区域。
+ * 布局：左侧是功能切换按钮（画在界面上，不是格子），右侧是当前功能的内容区；
+ * 自动补充页里有 3x3 物品白名单（0-8），下方是玩家的背包 3 行 + 快捷栏（9-44）。
+ * 没有人物/装备/合成区域。
  * <p>
  * 白名单格子既不能放入也不能取出（{@link WhitelistSlot}），设置/清空由
  * {@code ToolkitScreen} 拦截鼠标点击后发送自定义网络包完成。
+ * 白名单格子只属于“自动补充”页：切换到其它功能页时由界面调用
+ * {@link #setWhitelistVisible(boolean)} 让它们不再绘制、也不再响应鼠标。
  */
 public class ToolkitMenu extends AbstractContainerMenu {
     public static final int WHITELIST_SIZE = 9;
     public static final int WHITELIST_COLUMNS = 3;
-    /** 白名单格子左上角坐标（相对 GUI）。 */
-    public static final int WHITELIST_X = 14;
-    public static final int WHITELIST_Y = 48;
-    /** 玩家背包格子左上角坐标（相对 GUI）。 */
-    public static final int INVENTORY_X = 49;
+    /** 白名单格子左上角坐标（相对 GUI），位于右侧内容区中间。 */
+    public static final int WHITELIST_X = 143;
+    public static final int WHITELIST_Y = 62;
+    /** 玩家背包格子左上角坐标（相对 GUI）：放在右侧内容区，和左侧按钮栏完全分开。 */
+    public static final int INVENTORY_X = 89;
     public static final int INVENTORY_Y = 162;
     public static final int HOTBAR_Y = 220;
 
     private final Container whitelist;
+
+    /** 白名单格子当前是否显示（只影响客户端，服务端不需要关心）。 */
+    private boolean whitelistVisible = true;
+
+    /** 玩家的背包/快捷栏是否显示（只在“自动补充”页需要，用来往白名单里放物品）。 */
+    private boolean inventoryVisible = true;
 
     /** 客户端创建时使用（内容由服务端同步过来）。 */
     public ToolkitMenu(int containerId, Inventory playerInventory) {
@@ -43,7 +52,7 @@ public class ToolkitMenu extends AbstractContainerMenu {
         checkContainerSize(whitelist, WHITELIST_SIZE);
         this.whitelist = whitelist;
 
-        // 左侧 3x3 白名单
+        // 右侧内容区：3x3 白名单（只在“自动补充”页显示）
         for (int row = 0; row < 3; row++) {
             for (int column = 0; column < WHITELIST_COLUMNS; column++) {
                 int index = column + row * WHITELIST_COLUMNS;
@@ -51,17 +60,17 @@ public class ToolkitMenu extends AbstractContainerMenu {
             }
         }
 
-        // 玩家背包 3 行
+        // 玩家背包 3 行（只属于“自动补充”页）
         for (int row = 0; row < 3; row++) {
             for (int column = 0; column < 9; column++) {
-                this.addSlot(new Slot(playerInventory, column + row * 9 + 9, INVENTORY_X + column * 18,
-                        INVENTORY_Y + row * 18));
+                this.addSlot(new InventorySlot(playerInventory, column + row * 9 + 9,
+                        INVENTORY_X + column * 18, INVENTORY_Y + row * 18));
             }
         }
 
         // 玩家快捷栏
         for (int column = 0; column < 9; column++) {
-            this.addSlot(new Slot(playerInventory, column, INVENTORY_X + column * 18, HOTBAR_Y));
+            this.addSlot(new InventorySlot(playerInventory, column, INVENTORY_X + column * 18, HOTBAR_Y));
         }
     }
 
@@ -81,6 +90,24 @@ public class ToolkitMenu extends AbstractContainerMenu {
 
     public Container getWhitelist() {
         return this.whitelist;
+    }
+
+    /** 切换功能页时由界面调用：白名单格子只在“自动补充”页显示。 */
+    public void setWhitelistVisible(boolean visible) {
+        this.whitelistVisible = visible;
+    }
+
+    public boolean isWhitelistVisible() {
+        return this.whitelistVisible;
+    }
+
+    /** 切换功能页时由界面调用：玩家背包/快捷栏只在“自动补充”页显示。 */
+    public void setInventoryVisible(boolean visible) {
+        this.inventoryVisible = visible;
+    }
+
+    public boolean isInventoryVisible() {
+        return this.inventoryVisible;
     }
 
     @Override
@@ -128,11 +155,16 @@ public class ToolkitMenu extends AbstractContainerMenu {
     }
 
     /**
-     * 白名单格子：只用于显示，禁止放入/取出。
+     * 白名单格子：只用于显示，禁止放入/取出；不在“自动补充”页时视为不可见（不绘制、不响应鼠标）。
      */
-    public static class WhitelistSlot extends Slot {
+    public class WhitelistSlot extends Slot {
         public WhitelistSlot(Container container, int index, int x, int y) {
             super(container, index, x, y);
+        }
+
+        @Override
+        public boolean isActive() {
+            return ToolkitMenu.this.whitelistVisible;
         }
 
         @Override
@@ -143,6 +175,20 @@ public class ToolkitMenu extends AbstractContainerMenu {
         @Override
         public boolean mayPickup(Player player) {
             return false;
+        }
+    }
+
+    /**
+     * 玩家的背包/快捷栏格子：只用于“自动补充”页里往白名单放物品，其它页面整体隐藏。
+     */
+    public class InventorySlot extends Slot {
+        public InventorySlot(Container container, int index, int x, int y) {
+            super(container, index, x, y);
+        }
+
+        @Override
+        public boolean isActive() {
+            return ToolkitMenu.this.inventoryVisible;
         }
     }
 }

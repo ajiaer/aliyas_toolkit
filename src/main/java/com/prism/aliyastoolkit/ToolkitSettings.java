@@ -6,12 +6,10 @@ import java.util.List;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
-import io.netty.buffer.ByteBuf;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.util.Mth;
-import net.minecraft.util.StringRepresentable;
 
 /**
  * 玩家自己可配置的功能参数。
@@ -24,7 +22,7 @@ import net.minecraft.util.StringRepresentable;
  * </ul>
  * 本类是不可变对象：修改设置时用 {@code withXxx(...)} 生成新实例，再写回玩家数据。
  */
-public record ToolkitSettings(boolean requireExactItemMatch, TriggerMode triggerMode, int chainLimit,
+public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit,
         List<ChainPreset> presets, int selectedPreset, boolean allowBreakingOtherBlocks) {
     /** 连锁数量最小值。 */
     public static final int MIN_CHAIN_LIMIT = 1;
@@ -35,16 +33,14 @@ public record ToolkitSettings(boolean requireExactItemMatch, TriggerMode trigger
     /** 最多可以保存多少个“大量方块”预设。 */
     public static final int MAX_PRESETS = 16;
 
-    /** 新玩家的默认设置：物品完全一致、切换触发、连锁 64 个、只有一个默认预设、允许破坏其它方块。 */
-    public static final ToolkitSettings DEFAULT = new ToolkitSettings(true, TriggerMode.TOGGLE, DEFAULT_CHAIN_LIMIT,
+    /** 新玩家的默认设置：物品完全一致、连锁 64 个、只有一个默认预设、允许破坏其它方块。 */
+    public static final ToolkitSettings DEFAULT = new ToolkitSettings(true, DEFAULT_CHAIN_LIMIT,
             List.of(ChainPreset.DEFAULT), 0, true);
 
     /** 存档用的编解码器（字段都带默认值，老的玩家数据也能读）。 */
     public static final Codec<ToolkitSettings> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                     Codec.BOOL.optionalFieldOf("require_exact_item_match", DEFAULT.requireExactItemMatch())
                             .forGetter(ToolkitSettings::requireExactItemMatch),
-                    TriggerMode.CODEC.optionalFieldOf("chain_trigger_mode", DEFAULT.triggerMode())
-                            .forGetter(ToolkitSettings::triggerMode),
                     Codec.INT.optionalFieldOf("chain_limit", DEFAULT_CHAIN_LIMIT)
                             .forGetter(ToolkitSettings::chainLimit),
                     ChainPreset.CODEC.listOf().optionalFieldOf("chain_presets", List.of(ChainPreset.DEFAULT))
@@ -58,7 +54,6 @@ public record ToolkitSettings(boolean requireExactItemMatch, TriggerMode trigger
     /** 网络同步用的编解码器。 */
     public static final StreamCodec<RegistryFriendlyByteBuf, ToolkitSettings> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.BOOL, ToolkitSettings::requireExactItemMatch,
-            TriggerMode.STREAM_CODEC, ToolkitSettings::triggerMode,
             ByteBufCodecs.VAR_INT, ToolkitSettings::chainLimit,
             ChainPreset.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_PRESETS)), ToolkitSettings::presets,
             ByteBufCodecs.VAR_INT, ToolkitSettings::selectedPreset,
@@ -85,23 +80,18 @@ public record ToolkitSettings(boolean requireExactItemMatch, TriggerMode trigger
     }
 
     public ToolkitSettings withRequireExactItemMatch(boolean value) {
-        return new ToolkitSettings(value, this.triggerMode, this.chainLimit, this.presets, this.selectedPreset,
-                this.allowBreakingOtherBlocks);
-    }
-
-    public ToolkitSettings withTriggerMode(TriggerMode mode) {
-        return new ToolkitSettings(this.requireExactItemMatch, mode, this.chainLimit, this.presets, this.selectedPreset,
+        return new ToolkitSettings(value, this.chainLimit, this.presets, this.selectedPreset,
                 this.allowBreakingOtherBlocks);
     }
 
     public ToolkitSettings withChainLimit(int limit) {
-        return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, limit, this.presets, this.selectedPreset,
+        return new ToolkitSettings(this.requireExactItemMatch, limit, this.presets, this.selectedPreset,
                 this.allowBreakingOtherBlocks);
     }
 
     /** 大量方块的连锁范围里是否也破坏“非指向”的方块。 */
     public ToolkitSettings withAllowBreakingOtherBlocks(boolean value) {
-        return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, this.chainLimit, this.presets,
+        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.presets,
                 this.selectedPreset, value);
     }
 
@@ -109,13 +99,13 @@ public record ToolkitSettings(boolean requireExactItemMatch, TriggerMode trigger
     public ToolkitSettings withPreset(ChainPreset preset) {
         List<ChainPreset> copy = new ArrayList<>(this.presets);
         copy.set(this.selectedPreset, preset);
-        return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, this.chainLimit, copy,
+        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, copy,
                 this.selectedPreset, this.allowBreakingOtherBlocks);
     }
 
     /** 切换到指定预设（超出范围会被夹到合法值）。 */
     public ToolkitSettings withSelectedPreset(int index) {
-        return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, this.chainLimit, this.presets, index,
+        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.presets, index,
                 this.allowBreakingOtherBlocks);
     }
 
@@ -126,7 +116,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, TriggerMode trigger
         }
         List<ChainPreset> copy = new ArrayList<>(this.presets);
         copy.add(this.preset());
-        return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, this.chainLimit, copy,
+        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, copy,
                 copy.size() - 1, this.allowBreakingOtherBlocks);
     }
 
@@ -137,51 +127,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, TriggerMode trigger
         }
         List<ChainPreset> copy = new ArrayList<>(this.presets);
         copy.remove(this.selectedPreset);
-        return new ToolkitSettings(this.requireExactItemMatch, this.triggerMode, this.chainLimit, copy,
+        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, copy,
                 Math.min(this.selectedPreset, copy.size() - 1), this.allowBreakingOtherBlocks);
-    }
-
-    /**
-     * 连锁快捷键的触发方式。
-     */
-    public enum TriggerMode implements StringRepresentable {
-        /** 按住快捷键时连锁，松开就失效。 */
-        HOLD("hold"),
-        /** 按一下快捷键开启，再按一下关闭。 */
-        TOGGLE("toggle");
-
-        public static final Codec<TriggerMode> CODEC = StringRepresentable.fromEnum(TriggerMode::values);
-        public static final StreamCodec<ByteBuf, TriggerMode> STREAM_CODEC = ByteBufCodecs.VAR_INT
-                .map(TriggerMode::byId, TriggerMode::ordinal);
-
-        private final String name;
-
-        TriggerMode(String name) {
-            this.name = name;
-        }
-
-        @Override
-        public String getSerializedName() {
-            return this.name;
-        }
-
-        /** 网络/存档里如果读到未知 id，就回退到默认的“切换”。 */
-        public static TriggerMode byId(int id) {
-            for (TriggerMode mode : values()) {
-                if (mode.ordinal() == id) {
-                    return mode;
-                }
-            }
-            return TOGGLE;
-        }
-
-        public TriggerMode next() {
-            return this == HOLD ? TOGGLE : HOLD;
-        }
-
-        /** 界面里显示的名字（翻译键）。 */
-        public String translationKey() {
-            return "gui.aliyastoolkit.trigger." + this.name;
-        }
     }
 }
