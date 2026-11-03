@@ -24,7 +24,7 @@ import net.minecraft.util.Mth;
 public record ChainPreset(int up, int down, int left, int right, int length, boolean lockDirection) {
     /** 上/下/左/右的最大值。 */
     public static final int MAX_SIDE = 4;
-    /** 延伸长度的最小值/最大值/默认值。 */
+    /** 层数的最小值/最大值/默认值。 */
     public static final int MIN_LENGTH = 1;
     public static final int MAX_LENGTH = 8;
 
