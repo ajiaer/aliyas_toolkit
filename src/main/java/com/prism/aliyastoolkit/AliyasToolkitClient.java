@@ -77,6 +77,21 @@ public class AliyasToolkitClient {
             GLFW.GLFW_KEY_Z,
             KEY_CATEGORY);
 
+    /**
+     * 快速建造的快捷键。
+
+
+     * <p>
+     * 默认 C。固定为“切换”：按一下开启，再按一下关闭；按住它滚动滚轮可以切换快速建造预设。
+     * 开启快速建造会自动关闭连锁破坏（两者最多同时开启一个）。
+     */
+    public static final KeyMapping QUICK_BUILD_KEY = new KeyMapping(
+            "key." + AliyasToolkit.MODID + ".quick_build",
+            KeyConflictContext.IN_GAME,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_C,
+            KEY_CATEGORY);
+
     public AliyasToolkitClient(IEventBus modEventBus, ModContainer container) {
         // Allows NeoForge to create a config screen for this mod's configs.
         // The config screen is accessed by going to the Mods screen > clicking on your mod > clicking on config.
@@ -93,6 +108,7 @@ public class AliyasToolkitClient {
         event.register(SWAP_HOTBAR_KEY);
         event.register(OPEN_TOOLKIT_KEY);
         event.register(CHAIN_MINE_KEY);
+        event.register(QUICK_BUILD_KEY);
     }
 
     private static void onRegisterMenuScreens(RegisterMenuScreensEvent event) {
@@ -101,7 +117,8 @@ public class AliyasToolkitClient {
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
-        AliyasToolkit.LOGGER.info("Aliya's Toolkit client setup complete (swap: X, chain mining: Z, toolkit screen: Alt+X)");
+        AliyasToolkit.LOGGER.info(
+                "Aliya's Toolkit client setup complete (swap: X, chain mining: Z, quick build: C, toolkit screen: Alt+X)");
     }
 
     /**

@@ -86,7 +86,7 @@ public final class ChainMining {
      * 如果 origin 是空气或液体方块、无法破坏，则返回空列表）。
      * <p>
      * 石头、泥土、下界岩这类大量生成的方块（{@link ModBlockTags#CHAIN_VERTICAL_ONLY}）使用玩家当前选中的
-     * {@link ChainPreset}（横截面 + 延伸长度）计算，见 {@link #collectShapedChain}；
+     * {@link ChainPreset}（横截面 + 层数）计算，见 {@link #collectShapedChain}；
      * 其余方块按 3x3x3 连通搜索，见 {@link #collectConnectedChain}。
      * <p>
      * 本方法不修改世界，客户端/服务端都可以调用。

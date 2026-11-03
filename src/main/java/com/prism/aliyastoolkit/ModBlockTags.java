@@ -12,7 +12,7 @@ public final class ModBlockTags {
     /**
      * “大量方块”的方块（大量重复生成的实体方块，如石头、圆石、花岗岩、下界岩、泥土等）。
      * <p>
-     * 对这类方块做连锁破坏时，使用玩家当前选中的 {@link ChainPreset}（横截面 上/下/左/右 + 延伸长度 +
+     * 对这类方块做连锁破坏时，使用玩家当前选中的 {@link ChainPreset}（横截面 上/下/左/右 + 层数 +
      * 锁定方向）来计算范围，而不是普通的 3x3x3 连通搜索。
      * <p>
      * 标签内容在 {@code data/aliyastoolkit/tags/block/chain_vertical_only.json}，

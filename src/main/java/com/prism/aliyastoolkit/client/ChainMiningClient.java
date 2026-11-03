@@ -270,8 +270,23 @@ public final class ChainMiningClient {
         }
 
         toggled = !toggled;
+        if (toggled) {
+            // 连锁破坏和快速建造最多同时开启一个
+            QuickBuildClient.disableFromOtherFeature();
+        }
         player.displayClientMessage(Component.translatable(
                 toggled ? "message.aliyastoolkit.chain_on" : "message.aliyastoolkit.chain_off"), true);
+    }
+
+    /** 关闭连锁（另一个功能开启时调用）。 */
+    public static void deactivate(Minecraft minecraft) {
+        toggled = false;
+        chainKeyHeld = false;
+        scrolledWhileHeld = false;
+        active = false;
+        if (minecraft != null && minecraft.getConnection() != null) {
+            syncActive(minecraft);
+        }
     }
 
     /**
@@ -326,7 +341,7 @@ public final class ChainMiningClient {
     }
 
     /**
-     * 组装预设提示文字（编号 + 形状/长度/锁定方向）。
+     * 组装预设提示文字（编号 + 形状/层数/锁定方向）。
      */
     private static Component presetMessage(ToolkitSettings settings) {
         ChainPreset preset = settings.preset();

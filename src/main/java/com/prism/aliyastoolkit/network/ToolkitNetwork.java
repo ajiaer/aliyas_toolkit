@@ -12,8 +12,9 @@ public final class ToolkitNetwork {
      * <p>
      * NeoForge 之间连接时，双方注册的同一个包版本必须一致；修改包结构时记得把它加一。
      * 4：去掉了连锁触发方式（固定为切换），设置的同步结构随之变化。
+     * 5：新增快速建造（设置里多了建造预设，新增建造相关网络包）。
      */
-    public static final String PROTOCOL_VERSION = "4";
+    public static final String PROTOCOL_VERSION = "5";
 
     private ToolkitNetwork() {
     }
@@ -43,6 +44,10 @@ public final class ToolkitNetwork {
         // 快捷键 + 滚轮切换“大量方块”预设
         registrar.playToServer(CyclePresetPayload.TYPE, CyclePresetPayload.STREAM_CODEC,
                 CyclePresetPayload::handle);
+        // 快速建造
+        registrar.playToServer(QuickBuildPayload.TYPE, QuickBuildPayload.STREAM_CODEC, QuickBuildPayload::handle);
+        registrar.playToServer(CycleBuildPresetPayload.TYPE, CycleBuildPresetPayload.STREAM_CODEC,
+                CycleBuildPresetPayload::handle);
         // 自动补充
         registrar.playToServer(RefillHotbarPayload.TYPE, RefillHotbarPayload.STREAM_CODEC, RefillHotbarPayload::handle);
     }

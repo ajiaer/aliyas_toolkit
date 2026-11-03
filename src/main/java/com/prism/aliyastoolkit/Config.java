@@ -31,6 +31,14 @@ public class Config {
                     "Chain limit is configured per player in the in-game \"Aliya's Toolkit\" screen.")
             .define("enableChainMining", true);
 
+    /** 快速建造的总开关。 */
+    public static final ModConfigSpec.BooleanValue ENABLE_QUICK_BUILD = BUILDER
+            .comment(
+                    "Enable quick build.",
+                    "When enabled, pressing the quick-build key (default C) toggles quick build; right click twice to plan a region and build it with the block in your main hand.",
+                    "Quick-build presets are configured per player in the in-game \"Aliya's Toolkit\" screen.")
+            .define("enableQuickBuild", true);
+
     static final ModConfigSpec SPEC = BUILDER.build();
 }
 
