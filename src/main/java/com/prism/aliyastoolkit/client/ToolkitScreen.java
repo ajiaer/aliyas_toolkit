@@ -2,8 +2,10 @@ package com.prism.aliyastoolkit.client;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 import com.prism.aliyastoolkit.AliyasToolkitClient;
+import com.prism.aliyastoolkit.BuildPreset;
 import com.prism.aliyastoolkit.ChainPreset;
 import com.prism.aliyastoolkit.ToolkitSettings;
 import com.prism.aliyastoolkit.ToolkitSettingsCache;
@@ -19,6 +21,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
@@ -41,7 +44,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * <li>物品切换：功能说明文字</li>
  * <li>自动补充：补充物品是否需要完全一致 + 3x3 物品白名单</li>
  * <li>连锁破坏：连锁数量（左键 +1、右键 -1），以及只对石头/泥土这类大量方块生效的
- * 预设（横截面 + 长度 + 锁定方向）</li>
+ * 预设（横截面 + 层数 + 锁定方向）</li>
  * </ul>
  * 白名单格子和玩家背包/快捷栏只属于“自动补充”页：切到别的功能页时它们不绘制、也不响应鼠标。
  * 白名单格子：左键设置为当前拿着的物品（不消耗），右键清空。
@@ -85,7 +88,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private static final int CHAIN_LIMIT_Y = 30;
     private static final int CHAIN_MASSIVE_LABEL_Y = 58;
     private static final int CHAIN_PRESET_Y = 72;
-    /** 大量方块：上 / 左·长度·右 / 下，十字排列。 */
+    /** 大量方块：上 / 左·层数·右 / 下，十字排列。 */
     private static final int CHAIN_SHAPE_Y = 92;
     private static final int CHAIN_SHAPE_ROW_HEIGHT = 20;
     private static final int CHAIN_SHAPE_BUTTON_WIDTH = 38;
@@ -98,6 +101,14 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private static final int CHAIN_ALLOW_OTHER_Y = 172;
     private static final int CHAIN_HINT_Y = 196;
 
+    /** 快速建造页：各行的纵坐标。 */
+    private static final int BUILD_PRESET_Y = 32;
+    private static final int BUILD_OPERATION_Y = 54;
+    private static final int BUILD_DIMENSION_Y = 74;
+    private static final int BUILD_SHAPE_Y = 94;
+    private static final int BUILD_FILL_Y = 114;
+    private static final int BUILD_HINT_Y = 140;
+
     /** 当前界面里的设置（和客户端缓存保持同步）。 */
     private ToolkitSettings settings = ToolkitSettingsCache.get();
 
@@ -107,6 +118,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     /** 各功能页的按钮，切换功能页时整组显示/隐藏。 */
     private final List<AbstractWidget> autoRefillWidgets = new ArrayList<>();
     private final List<AbstractWidget> chainMiningWidgets = new ArrayList<>();
+    private final List<AbstractWidget> quickBuildWidgets = new ArrayList<>();
 
     private Button exactMatchButton;
     private Button chainLimitButton;
@@ -122,6 +134,15 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private Button lengthButton;
     private Button lockDirectionButton;
     private Button allowOtherBlocksButton;
+    private Button buildPresetPrevButton;
+    private Button buildPresetNameButton;
+    private Button buildPresetNextButton;
+    private Button buildPresetAddButton;
+    private Button buildPresetDeleteButton;
+    private Button buildOperationButton;
+    private Button buildDimensionButton;
+    private Button buildShapeButton;
+    private Button buildFillButton;
 
     public ToolkitScreen(ToolkitMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
@@ -139,6 +160,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         // init 在窗口大小变化、从别的界面返回时会再次调用，先清空上一次的分组
         this.autoRefillWidgets.clear();
         this.chainMiningWidgets.clear();
+        this.quickBuildWidgets.clear();
 
         int x = this.leftPos;
         int y = this.topPos;
@@ -200,7 +222,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.preset.delete.tooltip")))
                 .build(), this.chainMiningWidgets);
 
-        // 大量方块：十字排列（上 / 左·长度·右 / 下）
+        // 大量方块：十字排列（上 / 左·层数·右 / 下）
         this.shapeUpButton = this.addToGroup(this.createShapeButton(
                 x + CHAIN_SHAPE_CENTER_X, y + CHAIN_SHAPE_Y,
                 "gui.aliyastoolkit.settings.shape.up", 0), this.chainMiningWidgets);
@@ -234,6 +256,52 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.allow_other_blocks.tooltip")))
                 .build(), this.chainMiningWidgets);
 
+        // 快速建造：预设行（与连锁破坏一致）
+        this.buildPresetPrevButton = this.addToGroup(Button
+                .builder(Component.literal("<"), button -> this.selectRelativeBuildPreset(-1))
+                .bounds(x + SETTINGS_X, y + BUILD_PRESET_Y, 14, 14)
+                .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.preset.previous")))
+                .build(), this.quickBuildWidgets);
+        this.buildPresetNameButton = this.addToGroup(Button
+                .builder(Component.empty(), button -> this.selectRelativeBuildPreset(1))
+                .bounds(x + 104, y + BUILD_PRESET_Y, 68, 14)
+                .build(), this.quickBuildWidgets);
+        this.buildPresetNextButton = this.addToGroup(Button
+                .builder(Component.literal(">"), button -> this.selectRelativeBuildPreset(1))
+                .bounds(x + 174, y + BUILD_PRESET_Y, 14, 14)
+                .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.preset.next")))
+                .build(), this.quickBuildWidgets);
+        this.buildPresetAddButton = this.addToGroup(Button
+                .builder(Component.translatable("gui.aliyastoolkit.settings.preset.add"),
+                        button -> this.applySettings(this.settings.withAddedBuildPreset()))
+                .bounds(x + 190, y + BUILD_PRESET_Y, 28, 14)
+                .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.preset.add.tooltip")))
+                .build(), this.quickBuildWidgets);
+        this.buildPresetDeleteButton = this.addToGroup(Button
+                .builder(Component.translatable("gui.aliyastoolkit.settings.preset.delete"),
+                        button -> this.applySettings(this.settings.withRemovedBuildPreset()))
+                .bounds(x + 220, y + BUILD_PRESET_Y, 28, 14)
+                .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.preset.delete.tooltip")))
+                .build(), this.quickBuildWidgets);
+
+        // 快速建造：操作 / 维度 / 形状 / 填充（左键下一个、右键上一个，循环）
+        this.buildOperationButton = this.addToGroup(new StepperButton(
+                x + SETTINGS_X, y + BUILD_OPERATION_Y, SETTINGS_WIDTH, 14, Component.empty(),
+                Tooltip.create(Component.empty()),
+                () -> this.changeBuildOperation(1), () -> this.changeBuildOperation(-1)), this.quickBuildWidgets);
+        this.buildDimensionButton = this.addToGroup(new StepperButton(
+                x + SETTINGS_X, y + BUILD_DIMENSION_Y, SETTINGS_WIDTH, 14, Component.empty(),
+                Tooltip.create(Component.empty()),
+                () -> this.changeBuildDimension(1), () -> this.changeBuildDimension(-1)), this.quickBuildWidgets);
+        this.buildShapeButton = this.addToGroup(new StepperButton(
+                x + SETTINGS_X, y + BUILD_SHAPE_Y, SETTINGS_WIDTH, 14, Component.empty(),
+                Tooltip.create(Component.empty()),
+                () -> this.changeBuildShape(1), () -> this.changeBuildShape(-1)), this.quickBuildWidgets);
+        this.buildFillButton = this.addToGroup(new StepperButton(
+                x + SETTINGS_X, y + BUILD_FILL_Y, SETTINGS_WIDTH, 14, Component.empty(),
+                Tooltip.create(Component.empty()),
+                () -> this.changeBuildFill(1), () -> this.changeBuildFill(-1)), this.quickBuildWidgets);
+
         this.updateButtonLabels();
         this.updateFeatureVisibility();
     }
@@ -258,6 +326,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private void updateFeatureVisibility() {
         setGroupVisible(this.autoRefillWidgets, this.activeFeature == Feature.AUTO_REFILL);
         setGroupVisible(this.chainMiningWidgets, this.activeFeature == Feature.CHAIN_MINING);
+        setGroupVisible(this.quickBuildWidgets, this.activeFeature == Feature.QUICK_BUILD);
 
         boolean autoRefill = this.activeFeature == Feature.AUTO_REFILL;
         this.menu.setWhitelistVisible(autoRefill);
@@ -314,6 +383,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
             case HOTBAR_SWAP -> this.renderHotbarSwapLabels(guiGraphics);
             case AUTO_REFILL -> this.renderAutoRefillLabels(guiGraphics);
             case CHAIN_MINING -> this.renderChainMiningLabels(guiGraphics);
+            case QUICK_BUILD -> this.renderQuickBuildLabels(guiGraphics);
         }
 
         // 下方：玩家背包（只在“自动补充”页显示，用来往白名单里放物品）
@@ -355,6 +425,13 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         // 提示：按住连锁键滚动滚轮切换预设（不循环 / 不切换开关）
         this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.settings.chain.preset_hint",
                 AliyasToolkitClient.CHAIN_MINE_KEY.getTranslatedKeyMessage()), SETTINGS_X, CHAIN_HINT_Y, HINT_COLOR);
+    }
+
+    /** 快速建造页的文字。 */
+    private void renderQuickBuildLabels(GuiGraphics guiGraphics) {
+        this.drawContentTitle(guiGraphics);
+        this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.build.hint",
+                AliyasToolkitClient.QUICK_BUILD_KEY.getTranslatedKeyMessage()), SETTINGS_X, BUILD_HINT_Y, HINT_COLOR);
     }
 
     private void drawContentTitle(GuiGraphics guiGraphics) {
@@ -441,6 +518,42 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         }
     }
 
+    /** 切换快速建造预设；到两端停住，不循环。 */
+    private void selectRelativeBuildPreset(int direction) {
+        int count = this.settings.buildPresets().size();
+        if (count <= 1) {
+            return;
+        }
+        int index = Mth.clamp(this.settings.selectedBuildPreset() + (direction >= 0 ? 1 : -1), 0, count - 1);
+        if (index != this.settings.selectedBuildPreset()) {
+            this.applySettings(this.settings.withSelectedBuildPreset(index));
+        }
+    }
+
+    private void changeBuildOperation(int direction) {
+        BuildPreset preset = this.settings.buildPreset();
+        this.applySettings(this.settings.withBuildPreset(preset.withOperation(
+                BuildPreset.step(BuildPreset.operations(), preset.operation(), direction))));
+    }
+
+    private void changeBuildDimension(int direction) {
+        BuildPreset preset = this.settings.buildPreset();
+        this.applySettings(this.settings.withBuildPreset(preset.withDimension(
+                BuildPreset.step(BuildPreset.dimensions(), preset.dimension(), direction))));
+    }
+
+    private void changeBuildShape(int direction) {
+        BuildPreset preset = this.settings.buildPreset();
+        this.applySettings(this.settings.withBuildPreset(preset.withShape(
+                BuildPreset.step(BuildPreset.shapesFor(preset.dimension()), preset.shape(), direction))));
+    }
+
+    private void changeBuildFill(int direction) {
+        BuildPreset preset = this.settings.buildPreset();
+        this.applySettings(this.settings.withBuildPreset(preset.withFill(
+                BuildPreset.step(BuildPreset.fillsFor(preset.dimension(), preset.shape()), preset.fill(), direction))));
+    }
+
     private StepperButton createShapeButton(int x, int y, String labelKey, int side) {
         return new StepperButton(x, y, 38, 14, Component.empty(),
                 Tooltip.create(Component.translatable(labelKey + ".tooltip")),
@@ -475,15 +588,77 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 "gui.aliyastoolkit.settings.allow_other_blocks",
                 onOff(this.settings.allowBreakingOtherBlocks())));
 
+        BuildPreset build = this.settings.buildPreset();
+        this.buildPresetNameButton.setMessage(Component.translatable("gui.aliyastoolkit.settings.preset.name",
+                this.settings.selectedBuildPreset() + 1, this.settings.buildPresets().size()));
+        this.buildPresetNameButton.setTooltip(Tooltip.create(Component.translatable(
+                "gui.aliyastoolkit.build.preset.summary",
+                Component.translatable(build.operation().translationKey()),
+                Component.translatable(build.dimension().translationKey()),
+                Component.translatable(build.shape().translationKey()),
+                Component.translatable(build.fill().translationKey()))));
+        this.buildOperationButton.setMessage(Component.translatable("gui.aliyastoolkit.build.operation",
+                Component.translatable(build.operation().translationKey())));
+        this.buildDimensionButton.setMessage(Component.translatable("gui.aliyastoolkit.build.dimension",
+                Component.translatable(build.dimension().translationKey())));
+        this.buildShapeButton.setMessage(Component.translatable("gui.aliyastoolkit.build.shape",
+                Component.translatable(build.shape().translationKey())));
+        this.buildFillButton.setMessage(Component.translatable("gui.aliyastoolkit.build.fill",
+                Component.translatable(build.fill().translationKey())));
+
+        // 鼠标悬停时显示这个设置当前可选的全部内容（当前项用 [] 标出）
+        this.buildOperationButton.setTooltip(Tooltip.create(buildOptionsTooltip(
+                BuildPreset.operations(), build.operation(),
+                value -> Component.translatable(value.translationKey()),
+                "gui.aliyastoolkit.build.operation.tooltip")));
+        this.buildDimensionButton.setTooltip(Tooltip.create(buildOptionsTooltip(
+                BuildPreset.dimensions(), build.dimension(),
+                value -> Component.translatable(value.translationKey()),
+                "gui.aliyastoolkit.build.dimension.tooltip")));
+        this.buildShapeButton.setTooltip(Tooltip.create(buildOptionsTooltip(
+                BuildPreset.shapesFor(build.dimension()), build.shape(),
+                value -> Component.translatable(value.translationKey()),
+                "gui.aliyastoolkit.build.shape.tooltip")));
+        this.buildFillButton.setTooltip(Tooltip.create(buildOptionsTooltip(
+                BuildPreset.fillsFor(build.dimension(), build.shape()), build.fill(),
+                value -> Component.translatable(value.translationKey()),
+                "gui.aliyastoolkit.build.fill.tooltip")));
+
         // 预设数量到上限/下限时把按钮变灰；到两端时把上一页/下一页按钮变灰（不循环）
         this.presetAddButton.active = this.settings.presets().size() < ToolkitSettings.MAX_PRESETS;
         this.presetDeleteButton.active = this.settings.presets().size() > 1;
         this.presetPrevButton.active = this.settings.selectedPreset() > 0;
         this.presetNextButton.active = this.settings.selectedPreset() < this.settings.presets().size() - 1;
+        this.buildPresetAddButton.active = this.settings.buildPresets().size() < ToolkitSettings.MAX_PRESETS;
+        this.buildPresetDeleteButton.active = this.settings.buildPresets().size() > 1;
+        this.buildPresetPrevButton.active = this.settings.selectedBuildPreset() > 0;
+        this.buildPresetNextButton.active = this.settings.selectedBuildPreset()
+                < this.settings.buildPresets().size() - 1;
+        // 只有一个可选项时把形状/填充按钮变灰
+        this.buildShapeButton.active = BuildPreset.shapesFor(build.dimension()).size() > 1;
+        this.buildFillButton.active = BuildPreset.fillsFor(build.dimension(), build.shape()).size() > 1;
     }
 
     private static Component onOff(boolean value) {
         return Component.translatable(value ? "gui.aliyastoolkit.on" : "gui.aliyastoolkit.off");
+    }
+
+    /** 生成“可选：…”的 tooltip（当前项用 [] 标出）。 */
+    private static <T> Component buildOptionsTooltip(List<T> values, T current,
+            Function<T, Component> nameOf, String tooltipKey) {
+        MutableComponent list = Component.empty();
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) {
+                list.append(Component.literal(" · "));
+            }
+            Component name = nameOf.apply(values.get(i));
+            if (values.get(i).equals(current)) {
+                list.append(Component.literal("[").append(name).append(Component.literal("]")));
+            } else {
+                list.append(name);
+            }
+        }
+        return Component.translatable(tooltipKey, list);
     }
 
 
@@ -548,11 +723,12 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         }
     }
 
-    /** 左侧功能按钮对应的三个功能页（顺序就是按钮从上到下的顺序）。 */
+    /** 左侧功能按钮对应的功能页（顺序就是按钮从上到下的顺序）。 */
     private enum Feature {
         HOTBAR_SWAP("gui.aliyastoolkit.tab.hotbar_swap"),
         AUTO_REFILL("gui.aliyastoolkit.tab.auto_refill"),
-        CHAIN_MINING("gui.aliyastoolkit.tab.chain_mining");
+        CHAIN_MINING("gui.aliyastoolkit.tab.chain_mining"),
+        QUICK_BUILD("gui.aliyastoolkit.tab.quick_build");
 
         private final String translationKey;
 
