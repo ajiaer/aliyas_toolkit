@@ -1,7 +1,10 @@
 package com.prism.aliyastoolkit;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.prism.aliyastoolkit.client.ChainMiningClient;
 import com.prism.aliyastoolkit.client.ClientAutoRefill;
+import com.prism.aliyastoolkit.client.ExclusiveModes;
+import com.prism.aliyastoolkit.client.QuickBuildClient;
 import com.prism.aliyastoolkit.client.ToolkitScreen;
 import com.prism.aliyastoolkit.network.OpenToolkitPayload;
 import com.prism.aliyastoolkit.network.SwapHotbarPayload;
@@ -93,6 +96,10 @@ public class AliyasToolkitClient {
             KEY_CATEGORY);
 
     public AliyasToolkitClient(IEventBus modEventBus, ModContainer container) {
+        // 互斥模式：连锁破坏、快速建造（以及以后新增的同类功能）同一时间最多开启一个
+        ExclusiveModes.register(ExclusiveModes.CHAIN_MINING, ChainMiningClient::forceDisable);
+        ExclusiveModes.register(ExclusiveModes.QUICK_BUILD, QuickBuildClient::forceDisable);
+
         // Allows NeoForge to create a config screen for this mod's configs.
         // The config screen is accessed by going to the Mods screen > clicking on your mod > clicking on config.
         // Do not forget to add translations for your config options to the en_us.json file.

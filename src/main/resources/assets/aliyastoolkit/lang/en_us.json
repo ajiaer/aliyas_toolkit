@@ -79,7 +79,7 @@
   "message.aliyastoolkit.build_preset": "Build preset %s/%s · %s · %s · %s · %s",
   "message.aliyastoolkit.build_no_target": "No valid position under the crosshair",
   "message.aliyastoolkit.build_no_space": "No placeable position nearby",
-  "message.aliyastoolkit.build_not_block": "Hold a placeable solid block in your main hand",
+  "message.aliyastoolkit.build_not_block": "Hold a placeable solid block or slab in your main hand",
   "message.aliyastoolkit.build_not_enough": "Not enough blocks: need %s, have %s",
   "message.aliyastoolkit.build_done": "Quick build finished: %s blocks",
   "message.aliyastoolkit.build_too_big": "Region too large (max %s blocks)",

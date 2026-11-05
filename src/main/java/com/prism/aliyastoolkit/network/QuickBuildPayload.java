@@ -12,6 +12,7 @@ import com.prism.aliyastoolkit.QuickBuild;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -23,15 +24,20 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
  * 客户端 -> 服务端：快速建造。客户端把两个（已吸附的）点和当前预设发过来，
  * 服务端重新计算范围、校验距离/方块数量后真正放置方块。
+ * <p>
+ * {@code slabTop}：第一个点是否落在上半位置，用来决定半砖放成上半砖还是下半砖。
  */
-public record QuickBuildPayload(BlockPos first, BlockPos second, BuildPreset preset) implements CustomPacketPayload {
+public record QuickBuildPayload(BlockPos first, BlockPos second, BuildPreset preset, boolean slabTop)
+        implements CustomPacketPayload {
     public static final Type<QuickBuildPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(AliyasToolkit.MODID, "quick_build"));
 
@@ -39,6 +45,7 @@ public record QuickBuildPayload(BlockPos first, BlockPos second, BuildPreset pre
             BlockPos.STREAM_CODEC, QuickBuildPayload::first,
             BlockPos.STREAM_CODEC, QuickBuildPayload::second,
             BuildPreset.STREAM_CODEC, QuickBuildPayload::preset,
+            ByteBufCodecs.BOOL, QuickBuildPayload::slabTop,
             QuickBuildPayload::new);
 
     @Override
@@ -78,8 +85,16 @@ public record QuickBuildPayload(BlockPos first, BlockPos second, BuildPreset pre
                 player.displayClientMessage(Component.translatable("message.aliyastoolkit.build_not_block"), true);
                 return;
             }
-            BlockState state = blockItem.getBlock().defaultBlockState();
-            if (!state.isCollisionShapeFullBlock(level, first)) {
+            Block block = blockItem.getBlock();
+            BlockState state;
+            if (block instanceof SlabBlock) {
+                // 半砖：上半砖还是下半砖由第一个点决定
+                state = block.defaultBlockState().setValue(SlabBlock.TYPE,
+                        payload.slabTop() ? SlabType.TOP : SlabType.BOTTOM);
+            } else {
+                state = block.defaultBlockState();
+            }
+            if (!(block instanceof SlabBlock) && !state.isCollisionShapeFullBlock(level, first)) {
                 player.displayClientMessage(Component.translatable("message.aliyastoolkit.build_not_block"), true);
                 return;
             }

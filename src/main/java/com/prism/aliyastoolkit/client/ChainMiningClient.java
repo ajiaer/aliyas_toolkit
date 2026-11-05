@@ -271,20 +271,24 @@ public final class ChainMiningClient {
 
         toggled = !toggled;
         if (toggled) {
-            // 连锁破坏和快速建造最多同时开启一个
-            QuickBuildClient.disableFromOtherFeature();
+            // 与其它互斥模式（快速建造等）最多同时开启一个
+            ExclusiveModes.activate(ExclusiveModes.CHAIN_MINING);
+        } else {
+            ExclusiveModes.deactivate(ExclusiveModes.CHAIN_MINING);
         }
         player.displayClientMessage(Component.translatable(
                 toggled ? "message.aliyastoolkit.chain_on" : "message.aliyastoolkit.chain_off"), true);
     }
 
-    /** 关闭连锁（另一个功能开启时调用）。 */
-    public static void deactivate(Minecraft minecraft) {
+    /** 由互斥模式管理器调用：强制关闭连锁，不会再反过来关闭别人。 */
+    public static void forceDisable() {
         toggled = false;
         chainKeyHeld = false;
         scrolledWhileHeld = false;
         active = false;
-        if (minecraft != null && minecraft.getConnection() != null) {
+        ExclusiveModes.deactivate(ExclusiveModes.CHAIN_MINING);
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.getConnection() != null) {
             syncActive(minecraft);
         }
     }
@@ -305,6 +309,10 @@ public final class ChainMiningClient {
             return;
         }
         if (!AliyasToolkitClient.CHAIN_MINE_KEY.isDown()) {
+            return;
+        }
+        // 只有连锁破坏已经开启时才允许用滚轮切换预设
+        if (!toggled) {
             return;
         }
         double delta = event.getScrollDeltaY();

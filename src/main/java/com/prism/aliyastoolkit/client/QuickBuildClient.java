@@ -26,6 +26,7 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderStateShard;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.ConnectionProtocol;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
@@ -35,6 +36,7 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -105,6 +107,8 @@ public final class QuickBuildClient {
     private static int plannedCount;
     /** 状态提示的刷新计时。 */
     private static int statusTimer;
+    /** 第一个点是否落在上半位置（决定半砖放成上半砖还是下半砖）。 */
+    private static boolean slabTop;
 
     private QuickBuildClient() {
     }
@@ -172,7 +176,7 @@ public final class QuickBuildClient {
         }
     }
 
-    /** 开关快速建造；开启时会关掉连锁破坏。 */
+    /** 开关快速建造；开启时会关掉其它互斥模式（连锁破坏等）。 */
     public static void setEnabled(Minecraft minecraft, boolean value) {
         if (enabled == value) {
             return;
@@ -180,7 +184,9 @@ public final class QuickBuildClient {
         enabled = value;
         resetPlan();
         if (value) {
-            ChainMiningClient.deactivate(minecraft);
+            ExclusiveModes.activate(ExclusiveModes.QUICK_BUILD);
+        } else {
+            ExclusiveModes.deactivate(ExclusiveModes.QUICK_BUILD);
         }
         if (minecraft.player != null) {
             minecraft.player.displayClientMessage(Component.translatable(
@@ -188,8 +194,8 @@ public final class QuickBuildClient {
         }
     }
 
-    /** 由连锁破坏调用：另一个功能开启时关掉快速建造。 */
-    public static void disableFromOtherFeature() {
+    /** 由互斥模式管理器调用：强制关闭快速建造，不会再反过来关闭别人。 */
+    public static void forceDisable() {
         if (!enabled) {
             return;
         }
@@ -197,6 +203,7 @@ public final class QuickBuildClient {
         keyHeld = false;
         scrolledWhileHeld = false;
         resetPlan();
+        ExclusiveModes.deactivate(ExclusiveModes.QUICK_BUILD);
     }
 
     private static void resetPlan() {
@@ -207,6 +214,7 @@ public final class QuickBuildClient {
         outline = List.of();
         plannedCount = 0;
         statusTimer = 0;
+        slabTop = false;
     }
 
 
@@ -261,6 +269,10 @@ public final class QuickBuildClient {
             return;
         }
         if (!AliyasToolkitClient.QUICK_BUILD_KEY.isDown()) {
+            return;
+        }
+        // 只有快速建造已经开启时才允许用滚轮切换预设
+        if (!enabled) {
             return;
         }
         double delta = event.getScrollDeltaY();
@@ -346,6 +358,8 @@ public final class QuickBuildClient {
         BuildPreset preset = ToolkitSettingsCache.get().buildPreset();
         if (firstPoint == null) {
             firstPoint = target.immutable();
+            // 第一个点落在上半/下半位置：决定半砖放成上半砖还是下半砖
+            slabTop = isTopHalf(minecraft.hitResult);
             statusTimer = 0;
             updatePreview(minecraft, player);
             player.displayClientMessage(Component.translatable("message.aliyastoolkit.build_first_point"), true);
@@ -378,7 +392,7 @@ public final class QuickBuildClient {
         if (minecraft.getConnection() != null
                 && NetworkRegistry.hasChannel(minecraft.getConnection().getConnection(), ConnectionProtocol.PLAY,
                         QuickBuildPayload.TYPE.id())) {
-            PacketDistributor.sendToServer(new QuickBuildPayload(firstPoint, box, preset));
+            PacketDistributor.sendToServer(new QuickBuildPayload(firstPoint, box, preset, slabTop));
         }
         resetPlan();
     }
@@ -416,6 +430,11 @@ public final class QuickBuildClient {
     /**
      * 选点的位置：优先取准星指向方块“靠近玩家的那一面”的空气格；
      * 没有指向方块时，取玩家身前约 2 格的位置。
+     * <p>
+     * 注意：射线什么都没打到时，原版给的不是 null，而是 {@link HitResult.Type#MISS}
+     * 的 {@link BlockHitResult}，它的位置在<b>最大触及距离的射线末端</b>
+     * （见 {@code GameRenderer#filterHitResult}）。必须把它当成“没有指向方块”处理，
+     * 否则会取到几格外（约 4.5 格以上）的位置。
      */
     private static BlockPos pickTarget(Minecraft minecraft) {
         LocalPlayer player = minecraft.player;
@@ -423,7 +442,7 @@ public final class QuickBuildClient {
             return null;
         }
         HitResult hit = minecraft.hitResult;
-        if (hit instanceof BlockHitResult blockHit) {
+        if (hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK) {
             BlockPos hitPos = blockHit.getBlockPos();
             BlockPos adjacent = hitPos.relative(blockHit.getDirection());
             if (isReplaceable(minecraft.level, adjacent)) {
@@ -436,6 +455,7 @@ public final class QuickBuildClient {
         }
         Vec3 eye = player.getEyePosition(1.0F);
         Vec3 look = player.getViewVector(1.0F);
+        // 没有指向方块时：取指示器前方约 2 格的位置
         BlockPos pos = BlockPos.containing(eye.add(look.scale(2.0D)));
         return isReplaceable(minecraft.level, pos) ? pos.immutable() : null;
     }
@@ -445,12 +465,35 @@ public final class QuickBuildClient {
         return state.isAir() || state.canBeReplaced();
     }
 
-    /** 手上拿的是不是“可放置的实体方块”。 */
+    /** 手上拿的是不是“可放置的实体方块”（半砖也允许）。 */
     private static boolean isPlaceableSolid(ItemStack stack, BlockGetter level, BlockPos pos) {
         if (!(stack.getItem() instanceof BlockItem blockItem) || stack.isEmpty()) {
             return false;
         }
-        return blockItem.getBlock().defaultBlockState().isCollisionShapeFullBlock(level, pos);
+        BlockState state = blockItem.getBlock().defaultBlockState();
+        return state.getBlock() instanceof SlabBlock || state.isCollisionShapeFullBlock(level, pos);
+    }
+
+    /**
+     * 第一个点落在“上半位置”还是“下半位置”：上半砖还是下半砖由它决定。
+     * <p>
+     * 顶面（放在方块上面）→ 下半砖；底面（放在天花板下面）→ 上半砖；
+     * 侧面则看点击高度在方块里的位置（上半 → 上半砖，下半 → 下半砖）。
+     */
+    private static boolean isTopHalf(HitResult hit) {
+        // MISS 的位置在射线末端，不能拿来判断上半/下半
+        if (hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK) {
+            Direction face = blockHit.getDirection();
+            if (face == Direction.UP) {
+                return false;
+            }
+            if (face == Direction.DOWN) {
+                return true;
+            }
+            double fraction = blockHit.getLocation().y - Math.floor(blockHit.getLocation().y);
+            return fraction >= 0.5D;
+        }
+        return false;
     }
 
     /** 统计背包 + 快捷栏里某种物品的数量。 */

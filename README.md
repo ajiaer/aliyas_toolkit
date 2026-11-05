@@ -34,11 +34,11 @@
 ### 3. 连锁破坏
 
 - 短按 `Z`（默认，可改键）开关连锁：**松开按键时生效**；开启后挖方块会把周围相连的同种方块一起破坏；再短按一次关闭。
-- **和快速建造互斥**：开启其中一个会自动关闭另一个。
+- **和快速建造等“模式类”功能互斥**：连锁破坏、快速建造以及以后新增的同类功能**同一时间最多开启一个**；开启其中一个会自动关闭另一个。快捷栏交换、自动补充不受影响。
 - 以准星指向的方块为起点（距离和原版挖掘 / 交互距离一致）；先在它周围的 3×3×3 范围内找相同方块，再以找到的方块继续找，直到找不到或达到**连锁数量**（默认 64，范围 1-256，包含指向的那个方块）；超出时优先保留离起点近的。
 - **大量方块**（石头、圆石、花岗岩、下界岩、泥土等，见 `aliyastoolkit:chain_vertical_only` 方块标签）改用**预设**：横截面（上 / 下 / 左 / 右，各 0-4）+ **层数**（1-8）沿朝前方向延伸。例如上 2 下 2 左 0 右 1、层数 3，会挖出 2×5×3 的范围；默认全 0、层数 1 时只挖指向的那一格。形状是精确范围，不受「连锁数量」截断。
 - **允许其它方块**（默认开）：在这个形状范围里，除与指向方块相同的方块外，其它可破坏的方块也会一并尝试破坏；不可破坏的方块（基岩、屏障等）和液体方块（水、岩浆等）始终跳过，**预览描边里也不会出现它们**。关掉则只破坏与指向方块相同的方块。
-- **切换预设**：按住 `Z` 滚动鼠标滚轮（下滚下一个，上滚上一个）；到两端停住，**不会循环**。按住期间滚轮只用于切预设，松开 Z 不会切换连锁开关；切换后用**原版动作栏文字**显示预设编号和参数，随后自动淡出。
+- **切换预设**（需要先开启连锁破坏）：按住 `Z` 滚动鼠标滚轮（下滚下一个，上滚上一个）；到两端停住，**不会循环**。按住期间滚轮只用于切预设，松开 Z 不会切换连锁开关；切换后用**原版动作栏文字**显示预设编号和参数，随后自动淡出。
 - **锁定方向**（默认关）：开——始终沿水平朝向延伸（抬头 / 低头也一样）；关——跟随视线，可以朝上 / 朝下延伸。横截面的上下左右以玩家朝向为基准。
 - **潜行**时跟随视线，还可朝**正斜向上 / 正斜向下（45°）**延伸，横截面仍是「朝向前方」时的形状，不受锁定方向影响；锁定方向关时还会额外允许正上 / 正下。
 - 连锁激活时，只给连锁方块的**外表面轮廓**画描边（隔着方块也能看到）：只画 90° / 270° 的转角线，两个面平直相接（180°，例如并排的两个方块之间）以及连锁区域内部的棱都不画。
@@ -49,11 +49,12 @@
 
 ### 4. 快速建造
 
-- 短按 `C`（默认，可改键）开关快速建造（**松开按键时生效**）；按住 `C` 滚动鼠标滚轮切换建造预设（到两端停住，不会循环；松开不会切换开关）。
-- **和连锁破坏互斥**：开启其中一个会自动关闭另一个。
+- 短按 `C`（默认，可改键）开关快速建造（**松开按键时生效**）；按住 `C` 滚动鼠标滚轮切换建造预设（需要先开启快速建造；到两端停住，不会循环；松开不会切换开关）。
+- **和连锁破坏等“模式类”功能互斥**：同一时间最多开启一个（以后新增的同类功能也一样）；快捷栏交换、自动补充不受影响。
 - **右键第一次**确定第一个点：显示按预设规划的范围（**蓝色轮廓**，深浅与连锁破坏同理：直接可见部分亮蓝、被挡住部分暗蓝）、从当前指示位置到实际规划位置的**辅助线**，动作栏还会持续显示**所需方块数量**与背包里已有的数量。
 - **右键第二次**确定第二个点：检查主手是否为**可放置的实体方块**、数量（快捷栏 + 背包）是否足够；不足会提示并取消规划点，足够则立刻建造，**优先消耗背包里的方块**（先 9-35 格，再快捷栏 0-8 格）。
-- 选点位置：优先取准星指向方块「靠近玩家的那一面」的空气格；该位置不可替换时退回方块本身（若可替换）；没有指向方块时，取玩家身前约 2 格的位置。
+- 选点位置：优先取准星指向方块「靠近玩家的那一面」的空气格；该位置不可替换时退回方块本身（若可替换）；没有指向方块时（包括指向空中、超出触及距离的 MISS），取玩家身前约 2 格的位置。
+- **半砖**：主手拿着半砖也能建造；**上半砖 / 下半砖由第一个点决定**——点在方块的上半部分（或天花板底面）放上半砖，点在下半部分（或方块顶面）放下半砖。
 - 建造预设包含 `操作`、`维度`、`形状`、`填充`，并带有约束：
   - 操作：`点到点`（两个点是对角的两个位置）/ `中心到点`（第一个点是中心，向两侧对称扩展）；
   - 维度：`一维` / `二维` / `三维`；
@@ -100,9 +101,9 @@
 | --- | --- | --- |
 | 快捷栏 ↔ 背包最后一行交换 | `X` | 选项 → 控制 → 按键绑定 → *Aliya's Toolkit* |
 | 连锁破坏开关 | 短按 `Z`（松开时生效） | 同上 |
-| 切换大量方块预设 | 按住 `Z` 滚动滚轮（下滚下一个，上滚上一个，不循环；不会切换开关） | 同上 |
+| 切换大量方块预设 | 按住 `Z` 滚动滚轮（需先开启连锁破坏；下滚下一个，上滚上一个，不循环；不会切换开关） | 同上 |
 | 快速建造开关 | 短按 `C`（松开时生效） | 同上 |
-| 切换快速建造预设 | 按住 `C` 滚动滚轮（不循环；不会切换开关） | 同上 |
+| 切换快速建造预设 | 按住 `C` 滚动滚轮（需先开启快速建造；不循环；不会切换开关） | 同上 |
 | 打开 Aliya's Toolkit 配置界面 | `Alt + X` | 同上 |
 
 所有按键只在游戏内生效（打开界面时不会触发）。
@@ -201,11 +202,11 @@ export JAVA_HOME=/path/to/jdk-21
 ### 3. Chain mining
 
 - Tap `Z` (default, rebindable) to toggle chain mining — **it takes effect when the key is released**. Once enabled, breaking a block also breaks the connected blocks of the same type around it; tap the key again to turn it off.
-- **Mutually exclusive with quick build**: enabling one automatically disables the other.
+- **Mutually exclusive with quick build and other "mode" features**: chain mining, quick build and any future mode-like feature can have **only one active at a time**; enabling one automatically disables the other. Hotbar swap and automatic refill are not affected.
 - The starting block is the one under the crosshair (normal block interaction / attack reach). The game looks at the 3×3×3 area around it, then continues from every matching block it found, until nothing matches or the **chain limit** (default 64, range 1-256, including the targeted block) is reached. If more is found, the blocks closest to the starting block are kept.
 - **Massive blocks** (stone, cobblestone, granite, netherrack, dirt, ... — see the `aliyastoolkit:chain_vertical_only` block tag) use a **preset** instead: a cross-section (up / down / left / right, each 0-4) plus **layers** (1-8) extruded forward. For example up 2, down 2, left 0, right 1 with 3 layers mines a 2×5×3 region; with the defaults (all 0, 1 layer) only the targeted block is broken. The shape is exact and is not truncated by the chain limit.
 - **Allow other blocks** (default ON): inside that shape, blocks that are *not* identical to the targeted block are broken as well. Unbreakable blocks (bedrock, barrier, ...) and liquid blocks (water, lava, ...) are always skipped, and **they never show up in the preview outline either**. When OFF, only blocks identical to the targeted block are broken.
-- **Switch preset**: hold `Z` and scroll the mouse wheel (down = next, up = previous). It stops at both ends (**no wrapping**). While the key is held the wheel is only used for presets, and releasing Z does **not** toggle chain mining. The preset number and its parameters are shown as a vanilla action-bar message, which fades out automatically.
+- **Switch preset** (chain mining must be enabled first): hold `Z` and scroll the mouse wheel (down = next, up = previous). It stops at both ends (**no wrapping**). While the key is held the wheel is only used for presets, and releasing Z does **not** toggle chain mining. The preset number and its parameters are shown as a vanilla action-bar message, which fades out automatically.
 - **Lock direction** (default OFF): ON always extrudes along the horizontal facing (even when looking up / down); OFF follows the look direction, so you can also mine straight up or down. The cross-section's up / down / left / right are relative to the player.
 - **Sneaking**: the extrusion follows your look direction and may also go **45° diagonally up / down**, using the same forward-facing cross-section. This is independent of the lock direction; with lock direction OFF, straight up / down is also available.
 - While the chain key is active, the **outer surface of the chained blocks** is outlined (visible even through blocks). Only 90° / 270° corner lines are drawn: edges where two faces are flat (180°, e.g. between two side-by-side blocks) and edges inside the chain are skipped.
@@ -217,11 +218,12 @@ export JAVA_HOME=/path/to/jdk-21
 
 ### 4. Quick build
 
-- Tap `C` (default, rebindable) to toggle quick build (**takes effect on release**); hold `C` and scroll to switch build presets (stops at both ends, no wrapping; releasing the key does not toggle the mode).
-- **Mutually exclusive with chain mining**: enabling one automatically disables the other.
+- Tap `C` (default, rebindable) to toggle quick build (**takes effect on release**); hold `C` and scroll to switch build presets (quick build must be enabled first; stops at both ends, no wrapping; releasing the key does not toggle the mode).
+- **Mutually exclusive with chain mining and other "mode" features**: only one can be active at a time (this also applies to future mode-like features); hotbar swap and automatic refill are not affected.
 - **First right click** selects the first point: the planned region is shown as a **blue outline** (same depth shading as chain mining: bright blue where directly visible, dimmer blue behind blocks), a **helper line** is drawn from the current crosshair position to the actual planned position, and the action bar keeps showing the **required block count** and how many you have.
 - **Second right click** selects the second point: it checks that the main hand holds a **placeable solid block** and that the inventory (hotbar + backpack) has enough of it. If not, you get a message and the plan is cancelled; otherwise the region is built immediately, **consuming backpack items first** (slots 9-35, then hotbar 0-8).
-- Point selection prefers the air block on the side of the targeted block that faces the player; if that position is not replaceable it falls back to the block itself (when replaceable); without a block target it uses a position about 2 blocks in front of the player.
+- Point selection prefers the air block on the side of the targeted block that faces the player; if that position is not replaceable it falls back to the block itself (when replaceable); without a block target (including aiming at the sky or a MISS beyond reach) it uses a position about 2 blocks in front of the player.
+- **Slabs**: slabs can be built too; **whether it is a top or bottom slab is decided by the first point** — clicking the upper half of a block (or the underside of a ceiling) places a top slab, clicking the lower half (or the top face of a block) places a bottom slab.
 - A build preset contains `Operation`, `Dimension`, `Shape` and `Fill`, with constraints:
   - Operation: `Point to point` (the two points are opposite corners) / `Center to point` (the first point is the center and the region grows symmetrically);
   - Dimension: `1D` / `2D` / `3D`;
@@ -269,9 +271,9 @@ Press `Alt + X` (rebindable) to open it:
 | --- | --- | --- |
 | Swap hotbar ↔ last inventory row | `X` | Options → Controls → Key Binds → *Aliya's Toolkit* |
 | Chain mining toggle | Tap `Z` (applied on release) | same place |
-| Switch massive-block preset | Hold `Z` and scroll (down = next, up = previous, no wrapping; does not toggle the mode) | same place |
+| Switch massive-block preset | Hold `Z` and scroll (chain mining must be enabled; down = next, up = previous, no wrapping; does not toggle the mode) | same place |
 | Quick build toggle | Tap `C` (applied on release) | same place |
-| Switch quick-build preset | Hold `C` and scroll (no wrapping; does not toggle the mode) | same place |
+| Switch quick-build preset | Hold `C` and scroll (quick build must be enabled; no wrapping; does not toggle the mode) | same place |
 | Open the Aliya's Toolkit settings screen | `Alt + X` | same place |
 
 All keys only work in-game (not while a screen is open).

@@ -79,7 +79,7 @@
   "message.aliyastoolkit.build_preset": "建造预设 %s/%s · %s · %s · %s · %s",
   "message.aliyastoolkit.build_no_target": "没有指向可建造的位置",
   "message.aliyastoolkit.build_no_space": "附近没有可放置的位置",
-  "message.aliyastoolkit.build_not_block": "主手需要拿着可放置的实体方块",
+  "message.aliyastoolkit.build_not_block": "主手需要拿着可放置的实体方块或半砖",
   "message.aliyastoolkit.build_not_enough": "方块不足：需要 %s 个，只有 %s 个",
   "message.aliyastoolkit.build_done": "快速建造完成：%s 个方块",
   "message.aliyastoolkit.build_too_big": "范围太大（最多 %s 个方块）",
