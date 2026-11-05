@@ -24,7 +24,7 @@ import net.neoforged.neoforge.registries.NeoForgeRegistries;
  * <p>
  * 模组内容：
  * <ul>
- * <li>快捷栏与背包最后一行交换（快捷键，默认 X）</li>
+ * <li>快捷栏与背包指定行交换（快捷键，默认 X；交换行可在配置界面里选 1-3）</li>
  * <li>快捷栏物品消失后，从背包自动补充白名单物品</li>
  * <li>连锁破坏（快捷键，默认 Z）：按键切换到连锁状态后，用准星指向方块，挖一个带走附近相同的方块</li>
  * <li>“Aliya's Toolkit 配置”界面（快捷键 Alt + X）：左侧 3 个功能按钮（物品切换 / 自动补充 / 连锁破坏），

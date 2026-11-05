@@ -13,7 +13,7 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 public class Config {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
-    /** 快捷键“快捷栏与背包最后一行交换”的开关。 */
+    /** 快捷键“快捷栏与背包指定行交换”的开关。 */
     public static final ModConfigSpec.BooleanValue ENABLE_HOTBAR_SWAP = BUILDER
             .comment("Enable the hotbar swap key. When enabled, pressing the key swaps the hotbar with the last inventory row.")
             .define("enableHotbarSwap", true);

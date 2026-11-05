@@ -47,7 +47,7 @@ public final class ClientAutoRefill {
     }
 
     /**
-     * 刚执行过“快捷栏 <-> 背包最后一行”交换，短时间内不要触发自动补充。
+     * 刚执行过“快捷栏 <-> 背包指定行”交换，短时间内不要触发自动补充。
      */
     public static void suppressAfterSwap() {
         suppressTicks = Math.max(suppressTicks, SUPPRESS_TICKS_AFTER_SWAP);

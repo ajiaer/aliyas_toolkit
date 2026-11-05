@@ -349,12 +349,12 @@ public final class ChainMiningClient {
     }
 
     /**
-     * 组装预设提示文字（编号 + 形状/层数/锁定方向）。
+     * 组装预设提示文字（名称 + 编号 + 形状/层数/锁定方向）。
      */
     private static Component presetMessage(ToolkitSettings settings) {
         ChainPreset preset = settings.preset();
         return Component.translatable("message.aliyastoolkit.preset",
-                settings.selectedPreset() + 1, settings.presets().size(),
+                preset.name(), settings.selectedPreset() + 1, settings.presets().size(),
                 preset.up(), preset.down(), preset.left(), preset.right(), preset.length(),
                 Component.translatable(preset.lockDirection()
                         ? "gui.aliyastoolkit.on"

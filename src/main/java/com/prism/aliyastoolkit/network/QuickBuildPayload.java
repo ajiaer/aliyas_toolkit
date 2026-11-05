@@ -10,6 +10,7 @@ import com.prism.aliyastoolkit.InventorySync;
 import com.prism.aliyastoolkit.QuickBuild;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -24,19 +25,19 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
- * 客户端 -> 服务端：快速建造。客户端把两个（已吸附的）点和当前预设发过来，
+ * 客户端 -> 服务端：快速建造。客户端把两个（已吸附的）点、当前预设和第一个点的方块状态发过来，
  * 服务端重新计算范围、校验距离/方块数量后真正放置方块。
  * <p>
- * {@code slabTop}：第一个点是否落在上半位置，用来决定半砖放成上半砖还是下半砖。
+ * {@code stateId}：第一个点按原版放置规则放下方块时得到的状态 ID
+ * （{@link Block#BLOCK_STATE_REGISTRY}），之后所有方块都用这个状态
+ * （朝向、楼梯上下半、半砖上下半等都与手动在第一个点放置时一致）。
  */
-public record QuickBuildPayload(BlockPos first, BlockPos second, BuildPreset preset, boolean slabTop)
+public record QuickBuildPayload(BlockPos first, BlockPos second, BuildPreset preset, int stateId)
         implements CustomPacketPayload {
     public static final Type<QuickBuildPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(AliyasToolkit.MODID, "quick_build"));
@@ -45,7 +46,7 @@ public record QuickBuildPayload(BlockPos first, BlockPos second, BuildPreset pre
             BlockPos.STREAM_CODEC, QuickBuildPayload::first,
             BlockPos.STREAM_CODEC, QuickBuildPayload::second,
             BuildPreset.STREAM_CODEC, QuickBuildPayload::preset,
-            ByteBufCodecs.BOOL, QuickBuildPayload::slabTop,
+            ByteBufCodecs.VAR_INT, QuickBuildPayload::stateId,
             QuickBuildPayload::new);
 
     @Override
@@ -85,16 +86,9 @@ public record QuickBuildPayload(BlockPos first, BlockPos second, BuildPreset pre
                 player.displayClientMessage(Component.translatable("message.aliyastoolkit.build_not_block"), true);
                 return;
             }
-            Block block = blockItem.getBlock();
-            BlockState state;
-            if (block instanceof SlabBlock) {
-                // 半砖：上半砖还是下半砖由第一个点决定
-                state = block.defaultBlockState().setValue(SlabBlock.TYPE,
-                        payload.slabTop() ? SlabType.TOP : SlabType.BOTTOM);
-            } else {
-                state = block.defaultBlockState();
-            }
-            if (!(block instanceof SlabBlock) && !state.isCollisionShapeFullBlock(level, first)) {
+            // 用第一个点算出的状态；客户端不能伪造其它方块的状态
+            BlockState state = Block.stateById(payload.stateId());
+            if (state.isAir() || state.getBlock() != blockItem.getBlock()) {
                 player.displayClientMessage(Component.translatable("message.aliyastoolkit.build_not_block"), true);
                 return;
             }
@@ -119,17 +113,42 @@ public record QuickBuildPayload(BlockPos first, BlockPos second, BuildPreset pre
                 return;
             }
 
-            Item item = held.getItem();
-            int available = countItem(player.getInventory(), item);
-            if (available < placeable.size()) {
-                player.displayClientMessage(Component.translatable("message.aliyastoolkit.build_not_enough",
-                        placeable.size(), available), true);
-                return;
+            // 创造模式不消耗方块，也不检查数量
+            if (!player.isCreative()) {
+                Item item = held.getItem();
+                int available = countItem(player.getInventory(), item);
+                if (available < placeable.size()) {
+                    player.displayClientMessage(Component.translatable("message.aliyastoolkit.build_not_enough",
+                            placeable.size(), available), true);
+                    return;
+                }
+                consumeItem(player.getInventory(), item, placeable.size());
             }
-
-            consumeItem(player.getInventory(), item, placeable.size());
             for (BlockPos pos : placeable) {
                 level.setBlock(pos, state, Block.UPDATE_ALL);
+            }
+            // setBlock 只会更新“邻居”的形状，不会重算自己；这里按原版的 updateShape 规则
+            // 把每个方块自己的连接属性再算一遍（栅栏 / 墙 / 玻璃板 / 楼梯内外角 / 箱子合并等），
+            // 避免把第一个点的连接照搬到旁边没有对应方块的位置。
+            for (BlockPos pos : placeable) {
+                BlockState current = level.getBlockState(pos);
+                if (current.getBlock() != state.getBlock()) {
+                    continue;
+                }
+                BlockState corrected = current;
+                for (Direction direction : Direction.values()) {
+                    BlockPos neighborPos = pos.relative(direction);
+                    corrected = corrected.updateShape(direction, level.getBlockState(neighborPos),
+                            level, pos, neighborPos);
+                    // 需要支撑的方块（火把、花等）没有支撑时 updateShape 会变成空气：
+                    // 这种情况不替换，保持已经放下的方块
+                    if (corrected.getBlock() != current.getBlock()) {
+                        break;
+                    }
+                }
+                if (corrected != current && corrected.getBlock() == current.getBlock()) {
+                    level.setBlock(pos, corrected, Block.UPDATE_ALL);
+                }
             }
             level.playSound(null, first, state.getSoundType().getPlaceSound(), SoundSource.BLOCKS, 0.8F, 1.0F);
             InventorySync.sync(player);

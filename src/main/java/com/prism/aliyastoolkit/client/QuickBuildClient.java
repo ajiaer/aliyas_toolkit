@@ -35,8 +35,9 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.block.SlabBlock;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -58,25 +59,26 @@ import org.lwjgl.glfw.GLFW;
  * 客户端的“快速建造”：
  * <ul>
  * <li>快捷键（默认 C）切换开关；按住快捷键滚动滚轮切换建造预设（不循环）。</li>
- * <li>开启时右键第一次记录第一个点，之后每 tick 显示规划范围（蓝色轮廓）和辅助线，</li>
- * <li>右键第二次校验手持方块/数量后把请求发给服务端建造。</li>
+ * <li>开启时右键第一次记录第一个点，并按原版放置规则记下“在这里放下手持方块”得到的状态
+ * （朝向 / 上下半 / 半砖上下半等）；之后每 tick 显示规划范围（绿色轮廓）和辅助线，</li>
+ * <li>右键第二次校验手持方块/数量后把请求发给服务端建造，所有方块都用第一个点的状态。</li>
  * <li>和连锁破坏互斥：开启一个会自动关闭另一个。</li>
  * </ul>
  */
 @EventBusSubscriber(modid = AliyasToolkit.MODID, value = Dist.CLIENT)
 public final class QuickBuildClient {
-    /** 直接可见的蓝色轮廓。 */
-    private static final float FRONT_RED = 0.40F;
-    private static final float FRONT_GREEN = 0.72F;
-    private static final float FRONT_BLUE = 1.0F;
-    /** 被方块挡住部分的暗蓝色。 */
-    private static final float BEHIND_RED = 0.16F;
-    private static final float BEHIND_GREEN = 0.30F;
-    private static final float BEHIND_BLUE = 0.58F;
+    /** 直接可见的绿色轮廓。 */
+    private static final float FRONT_RED = 0.35F;
+    private static final float FRONT_GREEN = 0.95F;
+    private static final float FRONT_BLUE = 0.45F;
+    /** 被方块挡住部分的暗绿色。 */
+    private static final float BEHIND_RED = 0.14F;
+    private static final float BEHIND_GREEN = 0.40F;
+    private static final float BEHIND_BLUE = 0.18F;
     /** 辅助线颜色（比轮廓暗一点）。 */
-    private static final float HELPER_RED = 0.30F;
-    private static final float HELPER_GREEN = 0.55F;
-    private static final float HELPER_BLUE = 0.90F;
+    private static final float HELPER_RED = 0.25F;
+    private static final float HELPER_GREEN = 0.65F;
+    private static final float HELPER_BLUE = 0.30F;
 
     private static final RenderType OUTLINE_BEHIND = createLineType(
             "aliyastoolkit_build_outline_behind", RenderStateShard.NO_DEPTH_TEST, 2.0D);
@@ -107,8 +109,10 @@ public final class QuickBuildClient {
     private static int plannedCount;
     /** 状态提示的刷新计时。 */
     private static int statusTimer;
-    /** 第一个点是否落在上半位置（决定半砖放成上半砖还是下半砖）。 */
-    private static boolean slabTop;
+    /** 第一个点按原版放置规则算出的方块状态（快速建造的所有方块都用这个状态）。 */
+    private static BlockState placementState;
+    /** 第一个点时的方块命中信息（换了手持方块时用它重算状态）；指向空处时为 null。 */
+    private static BlockHitResult firstPointHit;
 
     private QuickBuildClient() {
     }
@@ -214,7 +218,8 @@ public final class QuickBuildClient {
         outline = List.of();
         plannedCount = 0;
         statusTimer = 0;
-        slabTop = false;
+        placementState = null;
+        firstPointHit = null;
     }
 
 
@@ -251,9 +256,14 @@ public final class QuickBuildClient {
         if (firstPoint != null && plannedPoint != null && plannedCount > 0) {
             if (--statusTimer <= 0) {
                 statusTimer = 10;
-                int available = countItem(player, player.getMainHandItem().getItem());
-                player.displayClientMessage(Component.translatable(
-                        "message.aliyastoolkit.build_status", plannedCount, available), true);
+                if (player.isCreative()) {
+                    player.displayClientMessage(Component.translatable(
+                            "message.aliyastoolkit.build_status_creative", plannedCount), true);
+                } else {
+                    int available = countItem(player, player.getMainHandItem().getItem());
+                    player.displayClientMessage(Component.translatable(
+                            "message.aliyastoolkit.build_status", plannedCount, available), true);
+                }
             }
         }
     }
@@ -302,7 +312,7 @@ public final class QuickBuildClient {
         if (minecraft.player != null) {
             BuildPreset preset = settings.buildPreset();
             minecraft.player.displayClientMessage(Component.translatable("message.aliyastoolkit.build_preset",
-                    settings.selectedBuildPreset() + 1, settings.buildPresets().size(),
+                    preset.name(), settings.selectedBuildPreset() + 1, settings.buildPresets().size(),
                     Component.translatable(preset.operation().translationKey()),
                     Component.translatable(preset.dimension().translationKey()),
                     Component.translatable(preset.shape().translationKey()),
@@ -358,8 +368,10 @@ public final class QuickBuildClient {
         BuildPreset preset = ToolkitSettingsCache.get().buildPreset();
         if (firstPoint == null) {
             firstPoint = target.immutable();
-            // 第一个点落在上半/下半位置：决定半砖放成上半砖还是下半砖
-            slabTop = isTopHalf(minecraft.hitResult);
+            firstPointHit = minecraft.hitResult instanceof BlockHitResult blockHit
+                    && minecraft.hitResult.getType() == HitResult.Type.BLOCK ? blockHit : null;
+            // 按“在第一个点放下当前手持方块”的原版规则算出状态（朝向、上下半、半砖上下半等）
+            placementState = computePlacementState(player, player.getMainHandItem(), firstPointHit, firstPoint);
             statusTimer = 0;
             updatePreview(minecraft, player);
             player.displayClientMessage(Component.translatable("message.aliyastoolkit.build_first_point"), true);
@@ -376,28 +388,41 @@ public final class QuickBuildClient {
         }
 
         ItemStack held = player.getMainHandItem();
-        if (!isPlaceableSolid(held, minecraft.level, target)) {
+        if (!isPlaceableBlock(held)) {
+            player.displayClientMessage(Component.translatable("message.aliyastoolkit.build_not_block"), true);
+            resetPlan();
+            return;
+        }
+        // 用第一个点算出的状态；中途换成别的方块时，按第一个点的命中信息重新算一次
+        BlockState state = placementState;
+        if (state == null || !(held.getItem() instanceof BlockItem blockItem)
+                || state.getBlock() != blockItem.getBlock()) {
+            state = computePlacementState(player, held, firstPointHit, firstPoint);
+        }
+        if (state == null) {
             player.displayClientMessage(Component.translatable("message.aliyastoolkit.build_not_block"), true);
             resetPlan();
             return;
         }
         int available = countItem(player, held.getItem());
-        if (available < positions.size()) {
+        // 创造模式不消耗，也不检查数量
+        if (!player.isCreative() && available < positions.size()) {
             player.displayClientMessage(Component.translatable("message.aliyastoolkit.build_not_enough",
                     positions.size(), available), true);
             resetPlan();
             return;
         }
 
+        int stateId = Block.BLOCK_STATE_REGISTRY.getId(state);
         if (minecraft.getConnection() != null
                 && NetworkRegistry.hasChannel(minecraft.getConnection().getConnection(), ConnectionProtocol.PLAY,
                         QuickBuildPayload.TYPE.id())) {
-            PacketDistributor.sendToServer(new QuickBuildPayload(firstPoint, box, preset, slabTop));
+            PacketDistributor.sendToServer(new QuickBuildPayload(firstPoint, box, preset, stateId));
         }
         resetPlan();
     }
 
-    /** 每 tick 刷新规划范围（蓝色轮廓）和辅助线。 */
+    /** 每 tick 刷新规划范围（绿色轮廓）和辅助线。 */
     private static void updatePreview(Minecraft minecraft, LocalPlayer player) {
         if (firstPoint == null) {
             rawTarget = null;
@@ -465,35 +490,47 @@ public final class QuickBuildClient {
         return state.isAir() || state.canBeReplaced();
     }
 
-    /** 手上拿的是不是“可放置的实体方块”（半砖也允许）。 */
-    private static boolean isPlaceableSolid(ItemStack stack, BlockGetter level, BlockPos pos) {
-        if (!(stack.getItem() instanceof BlockItem blockItem) || stack.isEmpty()) {
-            return false;
-        }
-        BlockState state = blockItem.getBlock().defaultBlockState();
-        return state.getBlock() instanceof SlabBlock || state.isCollisionShapeFullBlock(level, pos);
+    /** 手上拿的是不是可以放置的方块：所有 BlockItem 都允许（楼梯、半砖、栅栏、墙、玻璃板、地毯等）。 */
+    private static boolean isPlaceableBlock(ItemStack stack) {
+        return !stack.isEmpty() && stack.getItem() instanceof BlockItem;
     }
 
     /**
-     * 第一个点落在“上半位置”还是“下半位置”：上半砖还是下半砖由它决定。
+     * 计算“在第一个点按原版放置规则放下这个方块”会得到的状态。
      * <p>
-     * 顶面（放在方块上面）→ 下半砖；底面（放在天花板下面）→ 上半砖；
-     * 侧面则看点击高度在方块里的位置（上半 → 上半砖，下半 → 下半砖）。
+     * 和原版 {@link BlockItem#place} 一样构造 {@link BlockPlaceContext}
+     * （玩家视线、点击面、点击位置），再问方块要 {@link Block#getStateForPlacement}。
+     * 这样楼梯的朝向 / 上下半、半砖的上下半、原木的朝向等都与手动放置一致；
+     * 之后所有方块都用这一个状态（栅栏 / 墙 / 楼梯的连接形状由原版的相邻更新自行处理）。
+     * <p>
+     * 没有指向方块（MISS）时，用“第一个点正上方、点击面为顶面”的合成命中来计算。
      */
-    private static boolean isTopHalf(HitResult hit) {
-        // MISS 的位置在射线末端，不能拿来判断上半/下半
-        if (hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK) {
-            Direction face = blockHit.getDirection();
-            if (face == Direction.UP) {
-                return false;
-            }
-            if (face == Direction.DOWN) {
-                return true;
-            }
-            double fraction = blockHit.getLocation().y - Math.floor(blockHit.getLocation().y);
-            return fraction >= 0.5D;
+    private static BlockState computePlacementState(LocalPlayer player, ItemStack stack,
+            BlockHitResult hit, BlockPos target) {
+        if (!(stack.getItem() instanceof BlockItem blockItem)) {
+            return null;
         }
-        return false;
+        Block block = blockItem.getBlock();
+
+        BlockPlaceContext context = null;
+        if (hit != null) {
+            BlockPlaceContext candidate = new BlockPlaceContext(player, InteractionHand.MAIN_HAND, stack, hit);
+            // 真实的命中必须正好落在第一个点上，否则用合成的命中
+            if (candidate.getClickedPos().equals(target)) {
+                context = candidate;
+            }
+        }
+        if (context == null) {
+            BlockHitResult synthetic = new BlockHitResult(Vec3.atCenterOf(target), Direction.UP, target, false);
+            BlockPlaceContext candidate = new BlockPlaceContext(player, InteractionHand.MAIN_HAND, stack, synthetic);
+            if (!candidate.getClickedPos().equals(target)) {
+                return block.defaultBlockState();
+            }
+            context = candidate;
+        }
+
+        BlockState state = block.getStateForPlacement(context);
+        return state == null ? block.defaultBlockState() : state;
     }
 
     /** 统计背包 + 快捷栏里某种物品的数量。 */
@@ -530,21 +567,21 @@ public final class QuickBuildClient {
         poseStack.pushPose();
         poseStack.translate(-camera.x, -camera.y, -camera.z);
 
-        // 先画被方块挡住的暗蓝描边（关深度测试，隔着方块也能看到）
+        // 先画被方块挡住的暗绿描边（关深度测试，隔着方块也能看到）
         VertexConsumer behind = buffers.getBuffer(OUTLINE_BEHIND);
         for (ChainMining.OutlineEdge edge : outline) {
             renderEdge(poseStack, behind, edge, BEHIND_RED, BEHIND_GREEN, BEHIND_BLUE);
         }
         buffers.endBatch(OUTLINE_BEHIND);
 
-        // 再画直接可见的亮蓝描边（正常深度测试，被挡住的像素不会覆盖）
+        // 再画直接可见的亮绿描边（正常深度测试，被挡住的像素不会覆盖）
         VertexConsumer front = buffers.getBuffer(OUTLINE_FRONT);
         for (ChainMining.OutlineEdge edge : outline) {
             renderEdge(poseStack, front, edge, FRONT_RED, FRONT_GREEN, FRONT_BLUE);
         }
         buffers.endBatch(OUTLINE_FRONT);
 
-        // 第一个点：更粗的一点蓝色框
+        // 第一个点：更粗的一点绿色框
         if (firstPoint != null) {
             VertexConsumer box = buffers.getBuffer(FIRST_POINT_BOX);
             LevelRenderer.renderLineBox(poseStack, box, new AABB(firstPoint).inflate(BOX_INFLATE),

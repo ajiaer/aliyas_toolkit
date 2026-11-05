@@ -14,8 +14,10 @@ public final class ToolkitNetwork {
      * 4：去掉了连锁触发方式（固定为切换），设置的同步结构随之变化。
      * 5：新增快速建造（设置里多了建造预设，新增建造相关网络包）。
      * 6：快速建造请求增加半砖朝向字段。
+     * 7：设置里增加“交换行”和预设名称。
+     * 8：快速建造请求改为发送第一个点的方块状态（朝向/上下半等由它决定）。
      */
-    public static final String PROTOCOL_VERSION = "6";
+    public static final String PROTOCOL_VERSION = "8";
 
     private ToolkitNetwork() {
     }
@@ -26,7 +28,7 @@ public final class ToolkitNetwork {
         // ToolkitServer），否则把包发给没装模组的一方会让 NeoForge 直接断开连接。
         PayloadRegistrar registrar = event.registrar(PROTOCOL_VERSION).optional();
 
-        // 快捷键：快捷栏 <-> 背包最后一行
+        // 快捷键：快捷栏 <-> 背包指定行（“交换行”设置）
         registrar.playToServer(SwapHotbarPayload.TYPE, SwapHotbarPayload.STREAM_CODEC, SwapHotbarPayload::handle);
         // “Aliya's Toolkit 配置”界面（白名单 + 各项设置）
         registrar.playToServer(OpenToolkitPayload.TYPE, OpenToolkitPayload.STREAM_CODEC, OpenToolkitPayload::handle);
