@@ -1,6 +1,6 @@
 package com.prism.aliyastoolkit.menu;
 
-import com.prism.aliyastoolkit.blueprint.BlueprintBoxBlockEntity;
+import com.prism.aliyastoolkit.blueprint.BlueprintBoxView;
 import com.prism.aliyastoolkit.blueprint.BlueprintData;
 
 import net.minecraft.world.entity.player.Player;
@@ -14,12 +14,12 @@ import net.minecraft.world.item.ItemStack;
  * 而不是移动槽位坐标，这样槽位 ID 在客户端/服务端保持一致。
  */
 public class BlueprintSlot extends Slot {
-    private final BlueprintBoxBlockEntity box;
+    private final BlueprintBoxView box;
     private final int row;
     private final int column;
     private int containerSlot;
 
-    public BlueprintSlot(BlueprintBoxBlockEntity box, int row, int column, int x, int y) {
+    public BlueprintSlot(BlueprintBoxView box, int row, int column, int x, int y) {
         super(box, row * 9 + column, x, y);
         this.box = box;
         this.row = row;

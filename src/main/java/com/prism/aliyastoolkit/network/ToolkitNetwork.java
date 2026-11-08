@@ -19,8 +19,10 @@ public final class ToolkitNetwork {
      * 9：新增剪切复制（新增剪切复制网络包）。
      * 11：蓝图箱分级、容器内容作为材料、滚动界面。
      * 12：蓝图建造改为 V 选区 + 蓝图箱收蓝图 + Ctrl+右键虚影预览；移除 Ctrl+C/X/V。
+     * 13：蓝图建造改为蓝图箱双模式（Ctrl+右键进入），新增可配置快捷键；蓝图箱界面支持手持物品。
+     * 14：蓝图设置新增自动收集流体，蓝图记录过滤蓝图箱并修复容器复制掉落。
      */
-    public static final String PROTOCOL_VERSION = "12";
+    public static final String PROTOCOL_VERSION = "14";
 
     private ToolkitNetwork() {
     }
@@ -67,6 +69,8 @@ public final class ToolkitNetwork {
                 BlueprintBoxActionPayload::handle);
         registrar.playToServer(BlueprintScrollPayload.TYPE, BlueprintScrollPayload.STREAM_CODEC,
                 BlueprintScrollPayload::handle);
+        registrar.playToServer(OpenBlueprintBoxPayload.TYPE, OpenBlueprintBoxPayload.STREAM_CODEC,
+                OpenBlueprintBoxPayload::handle);
         // 自动补充
         registrar.playToServer(RefillHotbarPayload.TYPE, RefillHotbarPayload.STREAM_CODEC, RefillHotbarPayload::handle);
     }

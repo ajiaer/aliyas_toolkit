@@ -6,7 +6,7 @@ import java.util.List;
 import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.prism.aliyastoolkit.blueprint.BlueprintBoxBlockEntity;
+import com.prism.aliyastoolkit.blueprint.BlueprintBoxView;
 import com.prism.aliyastoolkit.menu.BlueprintBoxMenu;
 import com.prism.aliyastoolkit.menu.BlueprintSlot;
 import com.prism.aliyastoolkit.network.BlueprintBoxActionPayload;
@@ -85,7 +85,7 @@ public class BlueprintBoxScreen extends AbstractContainerScreen<BlueprintBoxMenu
     private static final ResourceLocation CREATIVE_SCROLLER =
             ResourceLocation.withDefaultNamespace("container/creative_inventory/scroller");
 
-    private final BlueprintBoxBlockEntity box;
+    private final BlueprintBoxView box;
     private final int visibleRows;
     private boolean draggingScroll;
 
@@ -130,7 +130,7 @@ public class BlueprintBoxScreen extends AbstractContainerScreen<BlueprintBoxMenu
     }
 
     private void sendAction(int action) {
-        PacketDistributor.sendToServer(new BlueprintBoxActionPayload(this.box.getBlockPos(), action));
+        PacketDistributor.sendToServer(new BlueprintBoxActionPayload(this.menu.getReference(), action));
     }
 
     @Override
@@ -396,7 +396,7 @@ public class BlueprintBoxScreen extends AbstractContainerScreen<BlueprintBoxMenu
             return;
         }
         this.menu.setScrollRow(clamped);
-        PacketDistributor.sendToServer(new BlueprintScrollPayload(this.box.getBlockPos(), clamped));
+        PacketDistributor.sendToServer(new BlueprintScrollPayload(this.menu.getReference(), clamped));
     }
 }
 

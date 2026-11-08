@@ -16,7 +16,9 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.FluidState;
 
 /**
  * 一份蓝图：方块状态 + 方块实体数据 + 容器内容。
@@ -138,21 +140,44 @@ public final class BlueprintData {
     /**
      * 需要的全部材料：各方块自身的物品 + 容器内容物。
      * <p>
-     * 相同精确 ItemStack 会合并；没有对应物品的方块（火、水等）不消耗物品。
+     * 相同精确 ItemStack 会合并；可以用桶接取的流体源头按对应桶物品计算，
+     * 没有对应物品的方块（火等）不消耗物品。
      */
     public List<Requirement> requirements() {
         List<Requirement> list = new ArrayList<>();
         for (Entry entry : this.entries) {
-            Item item = entry.state().getBlock().asItem();
-            if (item != Items.AIR) {
-                addRequirement(list, new ItemStack(item));
-            }
+            addRequirement(list, requirementFor(entry.state()));
         }
         for (ContainerContent content : this.contents) {
             addRequirement(list, content.stack());
         }
         list.sort(Comparator.comparing(BlueprintData::requirementSortKey));
         return list;
+    }
+
+    /** 一个方块状态在蓝图里对应的建造材料；流体源头用对应的桶物品。 */
+    private static ItemStack requirementFor(BlockState state) {
+        FluidState fluid = state.getFluidState();
+        if (state.getBlock() instanceof LiquidBlock && fluid.isSource()) {
+            Item bucket = fluid.getType().getBucket();
+            return bucket == null || bucket == Items.AIR ? ItemStack.EMPTY : new ItemStack(bucket);
+        }
+        Item item = state.getBlock().asItem();
+        return item == Items.AIR ? ItemStack.EMPTY : new ItemStack(item);
+    }
+
+    /** 蓝图里可用桶接取的流体源头数量。 */
+    public int fluidSourceCount() {
+        int count = 0;
+        for (Entry entry : this.entries) {
+            BlockState state = entry.state();
+            Item bucket = state.getFluidState().getType().getBucket();
+            if (state.getBlock() instanceof LiquidBlock && state.getFluidState().isSource()
+                    && bucket != null && bucket != Items.AIR) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private static void addRequirement(List<Requirement> list, ItemStack stack) {

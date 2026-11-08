@@ -1,8 +1,10 @@
 package com.prism.aliyastoolkit.menu;
 
 import com.prism.aliyastoolkit.AliyasToolkit;
-import com.prism.aliyastoolkit.blueprint.BlueprintBoxBlock;
 import com.prism.aliyastoolkit.blueprint.BlueprintBoxBlockEntity;
+import com.prism.aliyastoolkit.blueprint.BlueprintBoxItemContainer;
+import com.prism.aliyastoolkit.blueprint.BlueprintBoxReference;
+import com.prism.aliyastoolkit.blueprint.BlueprintBoxView;
 import com.prism.aliyastoolkit.blueprint.BlueprintBoxes;
 
 import net.minecraft.core.BlockPos;
@@ -14,7 +16,6 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.phys.Vec3;
 
 /**
  * 蓝图箱界面菜单：最多显示 5 行 × 9 列，列与玩家背包列对齐。
@@ -27,15 +28,31 @@ public class BlueprintBoxMenu extends AbstractContainerMenu {
     private static final int SLOT_X = 8;
     private static final int SLOT_Y = 18;
 
-    private final BlueprintBoxBlockEntity box;
+    private final BlueprintBoxView box;
+    private final BlueprintBoxReference reference;
     private final int totalRows;
     private final int visibleRows;
     private final int visibleSlots;
     private int scrollRow;
 
     public BlueprintBoxMenu(int containerId, Inventory playerInventory, BlueprintBoxBlockEntity box) {
+        this(containerId, playerInventory, box, BlueprintBoxReference.block(box.getBlockPos()));
+    }
+
+    /** 打开玩家物品栏里蓝图箱物品的界面。 */
+    public BlueprintBoxMenu(int containerId, Inventory playerInventory, int itemSlot) {
+        this(containerId, playerInventory, resolveItem(playerInventory, itemSlot));
+    }
+
+    private BlueprintBoxMenu(int containerId, Inventory playerInventory, Resolved resolved) {
+        this(containerId, playerInventory, resolved.box(), resolved.reference());
+    }
+
+    public BlueprintBoxMenu(int containerId, Inventory playerInventory, BlueprintBoxView box,
+            BlueprintBoxReference reference) {
         super(AliyasToolkit.BLUEPRINT_BOX_MENU.get(), containerId);
         this.box = box;
+        this.reference = reference;
         this.totalRows = box.getContainerSize() / 9;
         this.visibleRows = Math.min(VISIBLE_ROWS, this.totalRows);
         this.visibleSlots = this.visibleRows * 9;
@@ -58,11 +75,29 @@ public class BlueprintBoxMenu extends AbstractContainerMenu {
             this.addSlot(new Slot(playerInventory, column, SLOT_X + column * 18, inventoryY + 3 * 18 + 4));
         }
         // 与原版 ChestMenu 一样通知箱子“有人打开”，驱动箱盖动画。
-        this.box.startOpen(playerInventory.player);
+        if (box instanceof BlueprintBoxBlockEntity blockEntity) {
+            blockEntity.startOpen(playerInventory.player);
+        }
     }
 
     public BlueprintBoxMenu(int containerId, Inventory playerInventory, RegistryFriendlyByteBuf data) {
-        this(containerId, playerInventory, findBox(playerInventory, data.readBlockPos()));
+        this(containerId, playerInventory,
+                resolve(playerInventory, BlueprintBoxReference.STREAM_CODEC.decode(data)));
+    }
+
+    private record Resolved(BlueprintBoxView box, BlueprintBoxReference reference) {
+    }
+
+    private static Resolved resolve(Inventory playerInventory, BlueprintBoxReference reference) {
+        if (reference.isItem()) {
+            return resolveItem(playerInventory, reference.slot());
+        }
+        return new Resolved(findBox(playerInventory, reference.pos()), reference);
+    }
+
+    private static Resolved resolveItem(Inventory playerInventory, int slot) {
+        return new Resolved(new BlueprintBoxItemContainer(playerInventory.player, slot),
+                BlueprintBoxReference.item(slot));
     }
 
     private static BlueprintBoxBlockEntity findBox(Inventory playerInventory, BlockPos pos) {
@@ -74,8 +109,12 @@ public class BlueprintBoxMenu extends AbstractContainerMenu {
                 playerInventory.player.level().getBlockState(pos));
     }
 
-    public BlueprintBoxBlockEntity getBox() {
+    public BlueprintBoxView getBox() {
         return this.box;
+    }
+
+    public BlueprintBoxReference getReference() {
+        return this.reference;
     }
 
     public int getTotalRows() {
@@ -115,16 +154,14 @@ public class BlueprintBoxMenu extends AbstractContainerMenu {
     @Override
     public void removed(Player player) {
         super.removed(player);
-        this.box.stopOpen(player);
+        if (this.box instanceof BlueprintBoxBlockEntity blockEntity) {
+            blockEntity.stopOpen(player);
+        }
     }
 
     @Override
     public boolean stillValid(Player player) {
-        if (this.box.getLevel() == null) {
-            return true;
-        }
-        return this.box.getLevel().getBlockState(this.box.getBlockPos()).getBlock() instanceof BlueprintBoxBlock
-                && player.distanceToSqr(Vec3.atCenterOf(this.box.getBlockPos())) <= 64.0D;
+        return this.box.stillValid(player);
     }
 
     @Override

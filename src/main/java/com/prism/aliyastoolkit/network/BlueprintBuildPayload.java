@@ -115,13 +115,15 @@ public record BlueprintBuildPayload(BlockPos target, int rotation) implements Cu
             // 建造位置必须全部可替换，避免蓝图直接埋进现有方块。
             if (!level.isLoaded(payload.target()) || !level.getBlockState(payload.target()).canBeReplaced()) {
                 player.displayClientMessage(
-                        Component.translatable("message.aliyastoolkit.blueprint.no_space", 4), true);
+                        Component.translatable("message.aliyastoolkit.blueprint.no_space",
+                                CopyPaste.BLUEPRINT_PLACEMENT_SEARCH_RADIUS), true);
                 return;
             }
             for (BlockPos destination : destinations) {
                 if (!level.getBlockState(destination).canBeReplaced()) {
                     player.displayClientMessage(
-                            Component.translatable("message.aliyastoolkit.blueprint.no_space", 4), true);
+                            Component.translatable("message.aliyastoolkit.blueprint.no_space",
+                                    CopyPaste.BLUEPRINT_PLACEMENT_SEARCH_RADIUS), true);
                     return;
                 }
             }

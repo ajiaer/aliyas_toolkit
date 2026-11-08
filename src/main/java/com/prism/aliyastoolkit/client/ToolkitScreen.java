@@ -120,9 +120,10 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private static final int BUILD_FILL_Y = 128;
     private static final int BUILD_HINT_Y = 152;
 
-    /** 蓝图建造页：说明文字和操作提示的纵坐标。 */
+    /** 蓝图建造页：说明文字、自动收集流体开关和操作提示的纵坐标。 */
     private static final int COPY_PASTE_DESC_Y = 34;
-    private static final int COPY_PASTE_HINT_Y = 66;
+    private static final int COPY_PASTE_FLUID_Y = 60;
+    private static final int COPY_PASTE_HINT_Y = 82;
 
     /** 当前界面里的设置（和客户端缓存保持同步）。 */
     private ToolkitSettings settings = ToolkitSettingsCache.get();
@@ -166,6 +167,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private Button buildDimensionButton;
     private Button buildShapeButton;
     private Button buildFillButton;
+    private Button collectFluidsButton;
 
     public ToolkitScreen(ToolkitMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
@@ -357,6 +359,14 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 Tooltip.create(Component.empty()),
                 () -> this.changeBuildFill(1), () -> this.changeBuildFill(-1)), this.quickBuildWidgets);
 
+        // 蓝图建造：自动收集流体（默认开）
+        this.collectFluidsButton = this.addToGroup(Button
+                .builder(Component.empty(), button -> this.applySettings(
+                        this.settings.withCollectFluids(!this.settings.collectFluids())))
+                .bounds(x + SETTINGS_X, y + COPY_PASTE_FLUID_Y, SETTINGS_WIDTH, 14)
+                .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.collect_fluids.tooltip")))
+                .build(), this.copyPasteWidgets);
+
         this.updateButtonLabels();
         this.updateFeatureVisibility();
     }
@@ -506,11 +516,16 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 SETTINGS_X, COPY_PASTE_DESC_Y, TEXT_COLOR);
         y = Math.max(y + 4, COPY_PASTE_HINT_Y);
         y = this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.copy_paste.hint.select",
-                AliyasToolkitClient.COPY_PASTE_KEY.getTranslatedKeyMessage()), SETTINGS_X, y, HINT_COLOR);
-        y = this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.copy_paste.hint.place"),
-                SETTINGS_X, y, HINT_COLOR);
-        this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.copy_paste.hint.finish"),
-                SETTINGS_X, y, HINT_COLOR);
+                AliyasToolkitClient.BLUEPRINT_BUILD_KEY.getTranslatedKeyMessage(),
+                AliyasToolkitClient.BLUEPRINT_SNAP_KEY.getTranslatedKeyMessage()), SETTINGS_X, y, HINT_COLOR);
+        y = this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.copy_paste.hint.place",
+                AliyasToolkitClient.BLUEPRINT_BUILD_KEY.getTranslatedKeyMessage(),
+                AliyasToolkitClient.BLUEPRINT_ROTATE_KEY.getTranslatedKeyMessage()), SETTINGS_X, y, HINT_COLOR);
+        this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.copy_paste.hint.finish",
+                AliyasToolkitClient.BLUEPRINT_BUILD_KEY.getTranslatedKeyMessage(),
+                AliyasToolkitClient.BLUEPRINT_MODE_KEY.getTranslatedKeyMessage(),
+                AliyasToolkitClient.BLUEPRINT_EXIT_KEY.getTranslatedKeyMessage(),
+                AliyasToolkitClient.BLUEPRINT_OPEN_BOX_KEY.getTranslatedKeyMessage()), SETTINGS_X, y, HINT_COLOR);
     }
 
     private void drawContentTitle(GuiGraphics guiGraphics) {
@@ -786,6 +801,8 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 Component.translatable(build.shape().translationKey())));
         this.buildFillButton.setMessage(Component.translatable("gui.aliyastoolkit.build.fill",
                 Component.translatable(build.fill().translationKey())));
+        this.collectFluidsButton.setMessage(Component.translatable(
+                "gui.aliyastoolkit.settings.collect_fluids", onOff(this.settings.collectFluids())));
 
         // 鼠标悬停时显示这个设置当前可选的全部内容（当前项用 [] 标出）
         this.buildOperationButton.setTooltip(Tooltip.create(buildOptionsTooltip(

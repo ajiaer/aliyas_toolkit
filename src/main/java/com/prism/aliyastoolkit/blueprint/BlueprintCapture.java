@@ -16,11 +16,15 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.FluidState;
 
 /**
  * 从世界读取选区，生成蓝图（方块状态 + 方块实体数据 + 容器内容）。
@@ -53,13 +57,24 @@ public final class BlueprintCapture {
             BlockEntityType.BELL,
             BlockEntityType.ENCHANTING_TABLE);
 
-    public record Result(@Nullable BlueprintData blueprint, @Nullable String errorKey) {
+    public record Result(@Nullable BlueprintData blueprint, @Nullable String errorKey, int skippedBlueprintBoxes) {
+        public Result(@Nullable BlueprintData blueprint, @Nullable String errorKey) {
+            this(blueprint, errorKey, 0);
+        }
     }
 
     private BlueprintCapture() {
     }
 
     public static Result capture(Level level, BlockPos min, List<BlockPos> offsets, @Nullable Player player) {
+        return capture(level, min, offsets, player, false);
+    }
+
+    /**
+     * @param collectFluids 是否把可用桶接取的流体源头也记录进蓝图
+     */
+    public static Result capture(Level level, BlockPos min, List<BlockPos> offsets, @Nullable Player player,
+            boolean collectFluids) {
         if (offsets.isEmpty() || offsets.size() > CopyPaste.MAX_VOLUME) {
             return new Result(null, "message.aliyastoolkit.copy_paste_no_blocks");
         }
@@ -70,6 +85,7 @@ public final class BlueprintCapture {
         int maxY = 0;
         int maxZ = 0;
         int totalTagChars = 0;
+        int skippedBlueprintBoxes = 0;
 
         for (BlockPos offset : offsets) {
             if (offset.getX() < 0 || offset.getY() < 0 || offset.getZ() < 0) {
@@ -80,8 +96,19 @@ public final class BlueprintCapture {
                 return new Result(null, "message.aliyastoolkit.copy_paste_not_loaded");
             }
             BlockState state = level.getBlockState(pos);
-            if (state.isAir() || ChainMining.isFluidBlock(state)) {
+            if (state.isAir()) {
                 continue;
+            }
+            if (state.getBlock() instanceof BlueprintBoxBlock) {
+                // 蓝图箱不参与记录，避免把箱子本身收进箱子。
+                skippedBlueprintBoxes++;
+                continue;
+            }
+            if (ChainMining.isFluidBlock(state)) {
+                // 只处理可以用桶接取的流体源头；关闭自动收集流体时保持原来的行为。
+                if (!collectFluids || !isBucketableFluidSource(state)) {
+                    continue;
+                }
             }
             entries.add(new BlueprintData.Entry(offset.getX(), offset.getY(), offset.getZ(), state));
             maxX = Math.max(maxX, offset.getX());
@@ -107,6 +134,10 @@ public final class BlueprintCapture {
                 for (int slot = 0; slot < container.getContainerSize(); slot++) {
                     ItemStack stack = container.getItem(slot);
                     if (!stack.isEmpty()) {
+                        if (stack.getItem() instanceof BlueprintBoxItem) {
+                            skippedBlueprintBoxes++;
+                            continue;
+                        }
                         contents.add(new BlueprintData.ContainerContent(offset.getX(), offset.getY(), offset.getZ(),
                                 slot, stack.copy()));
                     }
@@ -118,6 +149,10 @@ public final class BlueprintCapture {
                     CompoundTag itemTag = items.getCompound(i);
                     ItemStack stack = ItemStack.parseOptional(level.registryAccess(), itemTag);
                     if (!stack.isEmpty()) {
+                        if (stack.getItem() instanceof BlueprintBoxItem) {
+                            skippedBlueprintBoxes++;
+                            continue;
+                        }
                         int slot = itemTag.getByte("Slot") & 255;
                         contents.add(new BlueprintData.ContainerContent(offset.getX(), offset.getY(), offset.getZ(),
                                 slot, stack.copy()));
@@ -128,8 +163,12 @@ public final class BlueprintCapture {
                 // 讲台的书在 Book 字段里
                 ItemStack book = ItemStack.parseOptional(level.registryAccess(), tag.getCompound("Book"));
                 if (!book.isEmpty()) {
-                    contents.add(new BlueprintData.ContainerContent(offset.getX(), offset.getY(), offset.getZ(), 0,
-                            book.copy()));
+                    if (book.getItem() instanceof BlueprintBoxItem) {
+                        skippedBlueprintBoxes++;
+                    } else {
+                        contents.add(new BlueprintData.ContainerContent(offset.getX(), offset.getY(), offset.getZ(), 0,
+                                book.copy()));
+                    }
                 }
                 tag.remove("Book");
             }
@@ -146,9 +185,19 @@ public final class BlueprintCapture {
         }
 
         if (entries.isEmpty()) {
-            return new Result(null, "message.aliyastoolkit.copy_paste_no_blocks");
+            return new Result(null, "message.aliyastoolkit.copy_paste_no_blocks", skippedBlueprintBoxes);
         }
-        return new Result(new BlueprintData(maxX + 1, maxY + 1, maxZ + 1, entries, blockEntities, contents), null);
+        return new Result(new BlueprintData(maxX + 1, maxY + 1, maxZ + 1, entries, blockEntities, contents), null,
+                skippedBlueprintBoxes);
+    }
+
+    private static boolean isBucketableFluidSource(BlockState state) {
+        if (!(state.getBlock() instanceof LiquidBlock)) {
+            return false;
+        }
+        FluidState fluid = state.getFluidState();
+        Item bucket = fluid.getType().getBucket();
+        return fluid.isSource() && bucket != null && bucket != Items.AIR;
     }
 
     private static boolean shouldCapture(BlockEntity blockEntity, @Nullable Player player) {

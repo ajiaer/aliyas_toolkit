@@ -7,6 +7,7 @@ import com.prism.aliyastoolkit.AliyasToolkit;
 import com.prism.aliyastoolkit.Config;
 import com.prism.aliyastoolkit.CopyPaste;
 import com.prism.aliyastoolkit.InventorySync;
+import com.prism.aliyastoolkit.ToolkitSettings;
 import com.prism.aliyastoolkit.blueprint.BlueprintBoxBlock;
 import com.prism.aliyastoolkit.blueprint.BlueprintBoxData;
 import com.prism.aliyastoolkit.blueprint.BlueprintBoxItem;
@@ -22,6 +23,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.Container;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -126,13 +129,33 @@ public record BlueprintCreatePayload(boolean cut, BlockPos min, List<BlockPos> o
             }
 
             ServerLevel level = player.serverLevel();
-            BlueprintCapture.Result result = BlueprintCapture.capture(level, payload.min(), payload.offsets(), player);
+            ToolkitSettings settings = player.getData(AliyasToolkit.SETTINGS);
+            boolean collectFluids = settings.collectFluids();
+            BlueprintCapture.Result result = BlueprintCapture.capture(level, payload.min(), payload.offsets(), player,
+                    collectFluids);
             if (result.errorKey() != null || result.blueprint() == null) {
                 player.displayClientMessage(Component.translatable(result.errorKey() == null
                         ? "message.aliyastoolkit.copy_paste_no_blocks" : result.errorKey()), true);
                 return;
             }
             BlueprintData blueprint = result.blueprint();
+            int fluidCount = blueprint.fluidSourceCount();
+            int skippedFluidSources = 0;
+            if (fluidCount > 0) {
+                int emptyBuckets = countEmptyBuckets(player);
+                if (emptyBuckets < fluidCount) {
+                    skippedFluidSources = fluidCount;
+                    // 空桶不足时不取消记录，只是跳过流体源头。
+                    result = BlueprintCapture.capture(level, payload.min(), payload.offsets(), player, false);
+                    if (result.errorKey() != null || result.blueprint() == null) {
+                        player.displayClientMessage(Component.translatable(
+                                "message.aliyastoolkit.blueprint.not_enough_buckets", fluidCount, emptyBuckets), true);
+                        return;
+                    }
+                    blueprint = result.blueprint();
+                    fluidCount = 0;
+                }
+            }
             int capacity = boxItem.capacity();
             List<BlueprintData.SlotDef> slotDefs = blueprint.createSlots(capacity);
             if (slotDefs.size() > capacity) {
@@ -153,13 +176,25 @@ public record BlueprintCreatePayload(boolean cut, BlockPos min, List<BlockPos> o
                     }
                 }
             }
+            if (payload.cut() && fluidCount > 0) {
+                consumeEmptyBuckets(player, fluidCount);
+            }
             BlueprintBoxData.writeAll(held, items, limits, blueprint, level.registryAccess());
 
             if (payload.cut()) {
-                // 蓝图已经保存了源方块（包括蓝图箱自身）的完整数据，移除时不再额外掉一份。
+                // 蓝图已经保存了源方块（包括容器内容）的完整数据，移除时不再额外掉一份。
+                BlueprintData finalBlueprint = blueprint;
                 BlueprintBoxBlock.withDropsSuppressed(() -> {
-                    for (BlueprintData.Entry entry : blueprint.entries()) {
+                    for (BlueprintData.Entry entry : finalBlueprint.entries()) {
                         BlockPos pos = payload.min().offset(entry.x(), entry.y(), entry.z());
+                        // 先清空并移除方块实体，避免箱子等容器在 setBlock 时把内容物再掉一份。
+                        var blockEntity = level.getBlockEntity(pos);
+                        if (blockEntity instanceof Container container) {
+                            container.clearContent();
+                        }
+                        if (blockEntity != null) {
+                            level.removeBlockEntity(pos);
+                        }
                         level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
                     }
                 });
@@ -167,10 +202,62 @@ public record BlueprintCreatePayload(boolean cut, BlockPos min, List<BlockPos> o
 
             player.getInventory().setChanged();
             InventorySync.sync(player);
-            player.displayClientMessage(payload.cut()
-                    ? Component.translatable("message.aliyastoolkit.blueprint.cut_created", blueprint.blockCount())
-                    : Component.translatable("message.aliyastoolkit.blueprint.created", blueprint.blockCount()), true);
+            int skippedBoxes = result.skippedBlueprintBoxes();
+            if (skippedBoxes > 0 && skippedFluidSources > 0) {
+                player.displayClientMessage(Component.translatable(
+                        "message.aliyastoolkit.blueprint.created_skipped_both",
+                        blueprint.blockCount(), skippedBoxes, skippedFluidSources), true);
+            } else if (skippedBoxes > 0) {
+                player.displayClientMessage(Component.translatable(
+                        "message.aliyastoolkit.blueprint.created_skipped_boxes",
+                        blueprint.blockCount(), skippedBoxes), true);
+            } else if (skippedFluidSources > 0) {
+                player.displayClientMessage(Component.translatable(
+                        "message.aliyastoolkit.blueprint.created_skipped_fluids",
+                        blueprint.blockCount(), skippedFluidSources), true);
+            } else {
+                player.displayClientMessage(payload.cut()
+                        ? Component.translatable("message.aliyastoolkit.blueprint.cut_created", blueprint.blockCount())
+                        : Component.translatable("message.aliyastoolkit.blueprint.created", blueprint.blockCount()),
+                        true);
+            }
         });
+    }
+
+    /** 主物品栏 + 快捷栏里空桶的数量。 */
+    private static int countEmptyBuckets(ServerPlayer player) {
+        int count = 0;
+        for (int slot = 0; slot < 36; slot++) {
+            ItemStack stack = player.getInventory().getItem(slot);
+            if (stack.is(Items.BUCKET)) {
+                count += stack.getCount();
+            }
+        }
+        ItemStack offhand = player.getOffhandItem();
+        if (offhand.is(Items.BUCKET)) {
+            count += offhand.getCount();
+        }
+        return count;
+    }
+
+    /** 从主物品栏 + 快捷栏 + 副手消耗指定数量的空桶。 */
+    private static void consumeEmptyBuckets(ServerPlayer player, int amount) {
+        int remaining = amount;
+        for (int slot = 0; slot < 36 && remaining > 0; slot++) {
+            ItemStack stack = player.getInventory().getItem(slot);
+            if (!stack.is(Items.BUCKET)) {
+                continue;
+            }
+            int take = Math.min(remaining, stack.getCount());
+            player.getInventory().removeItem(slot, take);
+            remaining -= take;
+        }
+        if (remaining > 0) {
+            ItemStack offhand = player.getOffhandItem();
+            if (offhand.is(Items.BUCKET)) {
+                offhand.shrink(Math.min(remaining, offhand.getCount()));
+            }
+        }
     }
 }
 

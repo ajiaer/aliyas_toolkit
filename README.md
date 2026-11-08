@@ -1,4 +1,4 @@
-# Aliya's Toolkit
+# Aliya's Toolkit / Aliya的工具包
 
 **Aliya's Toolkit** 是一个面向快捷栏 / 背包的轻量工具模组，适用于 **Minecraft 1.21.1 + NeoForge**。
 
@@ -71,18 +71,18 @@
 
 ### 5. 蓝图建造
 
-- 短按 `V`（默认，可改键）开关蓝图建造；**和连锁破坏、快速建造等“模式类”功能互斥**：开启它会自动关闭其它模式，开启其它模式也会关闭它。旧的 `Ctrl + C` / `Ctrl + X` / `Ctrl + V` 快捷键已移除。
-- **划定区域**：主手不能拿蓝图箱。右键一个方块记下第一个角，再右键另一个方块记下对角，两点围成的长方体就是一块要处理的区域；选好第一个点后会**实时预览**整个范围。可以重复多次，多块区域允许重叠（合并后一起去重处理）。左键取消正在划定的区域，或删除点击位置所在的已选区域。
-- 已确定的选区用**黄色轮廓**，正在跟随准星的动态预览用**亮黄色轮廓**；描边规则与连锁破坏 / 快速建造一致（只画 90° / 270° 转角线，被挡住的部分暗一点）。动态预览时不再额外绘制第一个点的单格粗框。选不到方块时（指向空气、超出触及距离），取视线前方约 2 格的位置，和快速建造一致。
-- **收进蓝图箱**：选区划好后，切换主手为**没有物品的蓝图箱**（可以已经存有蓝图，会被新蓝图覆盖），右键选区内的方块。客户端和服务端都会重新读取结构、校验容量；成功后选区里的方块消失，方块物品和容器内容全部收进箱子，并自动退出蓝图模式。
-- **容量不足**：如果所需格子超过箱子容量，会提示「物品过多，请使用更高级的蓝图箱」，**不会退出蓝图模式**，可以换更大的箱子后再次右键。
+- 手持任意等级的蓝图箱，按 `Ctrl + 右键`（默认，可改键）进入蓝图建造；**和连锁破坏、快速建造等“模式类”功能互斥**：开启它会自动关闭其它模式，开启其它模式也会关闭它。旧的 `V` 蓝图开关快捷键已移除（现在 `V` 是旋转虚影），所有蓝图快捷键都可以在按键绑定里修改。
+- **模式选择**：蓝图箱没有蓝图时自动进入**模式 1（绘制）**；有蓝图时进入**模式 2（建造）**。在模式 2 里，如果箱子没有物品，可以按 `Tab`（默认，可改键）切回模式 1，之后记录的新蓝图会覆盖当前蓝图；如果箱子里有物品（此时必定有蓝图），只能处于模式 2，无法切换，除非先清空物品或蓝图。
+- **模式 1 · 绘制**：右键两个位置扩选（动态预览为**浅黄色**，已确定选区为**橙色**，浅黄色优先显示）；左键两个位置缩选（动态预览为**浅红色**，浅红色优先显示）。可以反复叠加和删除。按住 `Shift`（默认，可改键）时选点会吸附到指向方块的外侧面。按 `Ctrl + 右键` 任意位置记录蓝图：把方块物品收进蓝图箱并退出蓝图建造。
 - 一次最多处理 4096 个方块，操作位置离玩家最远 40 格；服务端会重新读取方块、校验距离和物品数量。记录时会保存完整结构：方块状态 + 方块实体数据 + 容器内容及其原槽位；旋转时方块朝向（楼梯、箱子、告示牌、原木等）也会一起旋转。
 
 ### 6. 蓝图箱
 
-- 记录流程见上一节：`V` 选区 → 换成**没有物品的蓝图箱** → 右键选区收进箱子。记录会保存完整结构：方块状态 + 方块实体数据 + **容器里的物品及其原槽位**。
-- **虚影预览建造**：手持带蓝图的蓝图箱，按 `Ctrl + 右键` 进入预览。虚影默认在视线前方 **8 格**；如果结构会碰到玩家，会自动推远到「刚好碰不到 + 2 格」。**滚轮**调整远近（向前拉远、向后拉近；预览期间不会切换快捷栏物品），**Tab** 绕 Y 轴顺时针旋转 90°，方块朝向会跟着旋转。箱子、潜影盒、床等 `ENTITYBLOCK_ANIMATED` 方块也会使用真实 BlockState 显示对应的方块模型虚影。虚影会检查所有目标方块：在指示器周围半径 **4 格**的球内寻找最近的、全部可替换且不会碰到玩家的位置；找不到时提示「附近没有能放下蓝图的位置」。
-- **固定 / 建造**：第一次右键固定虚影，此时可以走近查看效果；左键取消固定，虚影重新跟随视角。固定后再次右键确认建造，按方块物品 + 容器内容精确消耗箱子里的材料；材料不足或距离过远不会开始。
+- 记录流程见上一节：手持蓝图箱 `Ctrl + 右键` 进入绘制模式 → 右键 / 左键划定和删除选区 → `Ctrl + 右键` 记录，物品收进箱子并退出。
+- **打开界面**：主手拿着蓝图箱时 `Alt + 右键`（默认，可改键）打开蓝图箱界面，等同于右键世界里的蓝图箱方块；右侧的清空蓝图 / 一键取出 / 一键存入和滚动都可用。
+- **虚影预览建造**：手持带蓝图的蓝图箱 `Ctrl + 右键` 进入建造模式。虚影默认在视线前方 **8 格**；**滚轮**调整远近，`V`（默认，可改键）绕 Y 轴顺时针旋转 90°。箱子、潜影盒、床等 `ENTITYBLOCK_ANIMATED` 方块也会使用真实 BlockState 显示对应的方块模型虚影。即使材料不足也会显示虚影；玩家与虚影的碰撞**只在刚放出虚影时检测一次**，之后不会再把虚影从玩家身边推开。寻找合法位置的范围为指示器周围半径 **8 格**的球。
+- **固定 / 建造**：右键固定虚影，此时可以走近查看效果；左键取消固定，虚影重新跟随视角。固定后按 `Ctrl + 右键` 检查材料并建造；材料不足会提示并退出蓝图建造。`Tab` 在没有物品时切换绘制 / 建造模式，`` ` ``（默认，可改键）退出蓝图建造。
+- **自动收集流体**（默认开，可在蓝图建造设置页切换）：开启后，记录蓝图时会识别可用桶接取的流体源头，检查背包空桶数量；足够时把流体装入桶并收进蓝图箱，不足时提示并跳过流体，不影响其它方块记录。
 - 等级与容量（都是 9 列）：
   - 蓝图箱：3×9（27），青金石色，木箱 + 8 纸；
   - 铜制蓝图箱：5×9（45），铜色，蓝图箱 + 8 铜锭；
@@ -131,7 +131,7 @@
 - 按住 `Z` 滚动滚轮切换预设时，用**原版动作栏文字**显示预设名称 + 编号 + 形状 / 层数 / 锁定方向，随后自动淡出。
 - 按住 `C` 滚动滚轮切换快速建造预设时，动作栏显示预设名称 + 编号 + 操作 / 维度 / 形状 / 填充。
 - 快速建造选好第一个点后，动作栏持续显示「所需方块 / 背包里数量」，右键第二次即可开建。
-- 连锁破坏的规划范围用白色描边、指向方块用更粗的白色框；快速建造的规划范围用绿色描边；蓝图建造的选区用黄色描边，虚影预览用蓝色描边（材料不足或位置不合法时变红）；固定后虚影保持在世界中，方便走近查看。
+- 连锁破坏的规划范围用白色描边、指向方块用更粗的白色框；快速建造的规划范围用绿色描边；蓝图建造已确定的选区用橙色描边，动态扩选用浅黄色、动态缩选用浅红色（优先级高于橙色），建造虚影用蓝色描边（材料不足或位置不合法时变红）；固定后虚影保持在世界中，方便走近查看。
 - 切换快捷栏物品时直接使用**原版自带的选中物品名称**提示，本模组不再额外画提示。
 
 
@@ -139,19 +139,20 @@
 
 | 操作 | 默认按键 | 修改位置 |
 | --- | --- | --- |
-| 快捷栏 ↔ 背包指定行交换 | `X` | 选项 → 控制 → 按键绑定 → *Aliya's Toolkit* |
+| 打开Aliya的工具包设置界面 | `Alt + X` | 选项 → 控制 → 按键绑定 → *Aliya's Toolkit* |
+| 快捷栏 ↔ 背包指定行交换 | `X` | 同上 |
 | 连锁破坏开关 | 短按 `Z`（松开时生效） | 同上 |
 | 切换大量方块预设 | 按住 `Z` 滚动滚轮（需先开启连锁破坏；下滚下一个，上滚上一个，不循环；不会切换开关） | 同上 |
 | 快速建造开关 | 短按 `C`（松开时生效） | 同上 |
 | 切换快速建造预设 | 按住 `C` 滚动滚轮（需先开启快速建造；不循环；不会切换开关） | 同上 |
-| 蓝图建造开关 / 选区模式 | 短按 `V` | 同上 |
-| 蓝图建造：把选区收进蓝图箱 | 换成无物品的蓝图箱后右键选区内方块 | 同上 |
-| 蓝图建造：进入虚影预览 | 手持带蓝图的蓝图箱，`Ctrl + 右键` | 同上 |
-| 蓝图建造：调整虚影距离 | 滚轮（预览期间不会切换物品） | 同上 |
-| 蓝图建造：旋转虚影 | `Tab`（固定之前） | 同上 |
-| 蓝图建造：固定 / 取消固定 | 右键 / 左键（虚影预览中） | 同上 |
-| 蓝图建造：确认建造 | 固定后再次右键 | 同上 |
-| 打开 Aliya's Toolkit 配置界面 | `Alt + X` | 同上 |
+| 蓝图箱：打开界面（主手） | `Alt + 右键` | 同上 |
+| 蓝图建造：进入 / 记录 / 建造 | `Ctrl + 右键` | 同上 |
+| 蓝图建造：切换绘制 / 建造模式 | `Tab`（箱子必须没有物品） | 同上 |
+| 蓝图建造：调整虚影距离 | 滚轮（蓝图模式期间不会切换物品） | 同上 |
+| 蓝图绘制：吸附方块外侧面 | 按住 `Shift`（默认） | 同上 |
+| 蓝图建造：旋转虚影 | `V`（固定之前） | 同上 |
+| 蓝图建造：固定 / 取消固定 | 右键 / 左键（建造模式中） | 同上 |
+| 蓝图建造：退出 | `` ` `` | 同上 |
 
 所有按键只在游戏内生效（打开界面时不会触发）。
 
@@ -291,18 +292,18 @@ export JAVA_HOME=/path/to/jdk-21
 
 ### 5. Blueprint build
 
-- Tap `V` (default, rebindable) to toggle blueprint build. It is **mutually exclusive with the other mode features** (chain mining, quick build): enabling one disables the others. The old `Ctrl + C` / `Ctrl + X` / `Ctrl + V` shortcuts have been removed.
-- **Mark regions**: your main hand must not hold a blueprint box. Right click a block to set the first corner, then right click another block to set the opposite corner; the cuboid between them becomes one region, and the whole region is **previewed live** after the first point. Repeat as often as you like — regions may overlap (they are merged and de-duplicated). Left click cancels the pending region or removes the marked region under the crosshair.
-- Marked regions are outlined in **yellow**; the live region that follows the crosshair uses a **brighter yellow**. Both use the same edge rules as chain mining / quick build (only 90° / 270° corner edges, hidden parts are darker). The separate thick box on the first point is no longer drawn during the live preview. When no block can be picked (pointing at air / out of reach), the position about 2 blocks ahead of the view is used, just like quick build.
-- **Store into a blueprint box**: after marking, switch your main hand to a **blueprint box with no items** (it may already contain a blueprint; the new one overwrites it), then right click a block inside the selection. Both client and server re-read the structure and validate capacity; on success the selected blocks disappear, all block items and container contents are stored in the box, and blueprint mode exits.
-- **Not enough space**: if the required slots exceed the box capacity, you get "Too many items; use a higher tier blueprint box" and **blueprint mode stays active**, so you can switch to a larger box and right click again.
+- Hold any blueprint box and press `Ctrl + right click` (default, rebindable) to enter blueprint build. It is **mutually exclusive with the other mode features** (chain mining, quick build). The old `V` toggle shortcut has been removed (`V` now rotates the ghost); every blueprint shortcut can be changed in Key Binds.
+- **Mode selection**: a box without a blueprint enters **mode 1 (draw)**; a box with a blueprint enters **mode 2 (build)**. In mode 2, if the box has no items, `Tab` (default, rebindable) switches back to mode 1 and a newly recorded blueprint overwrites the current one. If the box contains items (and therefore a blueprint), only mode 2 is available until the items or blueprint are cleared.
+- **Mode 1 · Draw**: right click two positions to expand the selection (live preview **light yellow**, confirmed selection **orange**, light yellow drawn on top); left click two positions to shrink it (live preview **light red**, drawn on top). Add and remove as often as needed. Hold `Shift` (default, rebindable) to snap the point to the targeted block face. Press `Ctrl + right click` anywhere to record the blueprint, collect the block items into the box and exit.
 - Up to 4096 blocks per operation and the targets must be within 40 blocks of the player; the server re-reads the blocks and validates distance and item counts. The recording stores block states, block entity data, and container contents with their original slots; when rotating, block orientations (stairs, chests, signs, logs, ...) are rotated as well.
 
 ### 6. Blueprint boxes
 
-- Recording flow: press `V` and mark the region → switch to a **blueprint box with no items** → right click the selection to store it. The recording stores the complete structure: block states, block entity data, and **container contents together with their original slots**.
-- **Ghost preview building**: hold a blueprint box with a blueprint and press `Ctrl + right click` to enter the preview. The ghost starts **8 blocks** ahead of your view; if the structure would touch you, it automatically moves to "just far enough + 2 blocks". **Scroll** to change the distance (scroll forward = farther, backward = closer; the wheel does not switch items during the preview), and press **Tab** to rotate 90° clockwise around the Y axis; block orientations rotate with it. `ENTITYBLOCK_ANIMATED` blocks such as chests, shulker boxes and beds render their block models with the real BlockState. The ghost checks every target block: it searches a sphere of radius **4** around the indicator for the nearest position where all blocks are replaceable and the structure does not touch the player, and reports that no position fits if none is found.
-- **Pin / build**: the first right click pins the ghost so you can walk around and inspect it; left click unpins it and it follows your view again. While pinned, right click again to confirm the build. Block items and container contents are consumed exactly from the box; not enough materials or too much distance cancels the build.
+- Recording flow: hold a blueprint box and press `Ctrl + right click` to enter draw mode → add/remove regions with right/left clicks → `Ctrl + right click` to record; the items go into the box and blueprint build exits.
+- **Open the screen**: `Alt + right click` (default, rebindable) while holding a blueprint box opens the same blueprint box screen as right-clicking a placed box; Clear Blueprint / Take All / Store All and scrolling all work.
+- **Ghost preview building**: hold a blueprint box with a blueprint and press `Ctrl + right click` to enter build mode. The ghost starts **8 blocks** ahead of your view; **scroll** changes the distance and `V` (default, rebindable) rotates 90° clockwise around the Y axis. `ENTITYBLOCK_ANIMATED` blocks such as chests, shulker boxes and beds render their block models with the real BlockState. The preview is shown even when materials are insufficient. The player/ghost collision is checked **only once when the ghost first appears**, so the whole structure stays visible while you look around. The search for a valid position uses a sphere of radius **8** around the indicator.
+- **Pin / build**: right click pins the ghost so you can walk around and inspect it; left click unpins it. While pinned, press `Ctrl + right click` to check materials and build; insufficient materials show a message and exit blueprint build. `Tab` switches draw/build mode when the box has no items, and `` ` `` (default, rebindable) exits blueprint build.
+- **Auto Collect Fluids** (default ON, toggled on the blueprint build settings page): bucketable fluid sources are included in the blueprint. If there are enough empty buckets, the fluids are collected into buckets in the box; otherwise a message is shown and fluids are skipped without cancelling the rest of the blueprint.
 - Tiers and capacities (all 9 columns):
   - Blueprint Box: 3×9 (27), lapis trim, chest + 8 paper;
   - Copper Blueprint Box: 5×9 (45), copper trim, blueprint box + 8 copper ingots;
@@ -351,7 +352,7 @@ Press `Alt + X` (rebindable) to open it:
 - Switching presets (hold `Z` and scroll) shows the preset name, number, shape / layers / lock direction in the **action bar** (vanilla text overlay), which fades out automatically.
 - Switching quick-build presets (hold `C` and scroll) shows the preset name, number, operation / dimension / shape / fill in the action bar.
 - After the first quick-build point is selected, the action bar keeps showing the required block count and how many you have; the second right click starts the build.
-- Chain mining outlines the planned region in white and the targeted block with a thicker white frame; quick build outlines the planned region in green; blueprint build outlines the marked regions in yellow and the ghost preview in blue (red when materials are insufficient or the position is invalid); a pinned ghost stays in the world so you can walk around and inspect it.
+- Chain mining outlines the planned region in white and the targeted block with a thicker white frame; quick build outlines the planned region in green; blueprint build outlines the confirmed selection in orange, live expansion in light yellow and live shrinking in light red (drawn on top of orange), and the build ghost in blue (red when materials are insufficient or the position is invalid); a pinned ghost stays in the world so you can walk around and inspect it.
 - Switching the selected hotbar slot uses vanilla's built-in **selected item name** display; the mod does not add a second prompt.
 
 
@@ -359,19 +360,20 @@ Press `Alt + X` (rebindable) to open it:
 
 | Action | Default key | Change it in |
 | --- | --- | --- |
-| Swap hotbar ↔ chosen inventory row | `X` | Options → Controls → Key Binds → *Aliya's Toolkit* |
+| Open the Aliya's Toolkit settings screen | `Alt + X` | Options → Controls → Key Binds → *Aliya's Toolkit* |
+| Swap hotbar ↔ chosen inventory row | `X` | same place |
 | Chain mining toggle | Tap `Z` (applied on release) | same place |
 | Switch massive-block preset | Hold `Z` and scroll (chain mining must be enabled; down = next, up = previous, no wrapping; does not toggle the mode) | same place |
 | Quick build toggle | Tap `C` (applied on release) | same place |
 | Switch quick-build preset | Hold `C` and scroll (quick build must be enabled; no wrapping; does not toggle the mode) | same place |
-| Blueprint build toggle / selection mode | Tap `V` | same place |
-| Blueprint build: store the selection | Switch to a blueprint box with no items, then right click inside the selection | same place |
-| Blueprint build: ghost preview | Hold a box with a blueprint, `Ctrl + right click` | same place |
-| Blueprint build: change ghost distance | Scroll (does not switch items during the preview) | same place |
-| Blueprint build: rotate the ghost | `Tab` (before pinning) | same place |
-| Blueprint build: pin / unpin | right click / left click (during ghost preview) | same place |
-| Blueprint build: confirm | right click again while pinned | same place |
-| Open the Aliya's Toolkit settings screen | `Alt + X` | same place |
+| Blueprint box: open the screen (main hand) | `Alt + right click` | same place |
+| Blueprint build: enter / record / build | `Ctrl + right click` | same place |
+| Blueprint build: switch draw / build mode | `Tab` (the box must have no items) | same place |
+| Blueprint build: change ghost distance | Scroll (does not switch items during blueprint mode) | same place |
+| Blueprint draw: snap to block face | Hold `Shift` (default) | same place |
+| Blueprint build: rotate the ghost | `V` (before pinning) | same place |
+| Blueprint build: pin / unpin | right click / left click (build mode) | same place |
+| Blueprint build: exit | `` ` `` | same place |
 
 All keys only work in-game (not while a screen is open).
 

@@ -18,6 +18,7 @@ import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.WorldlyContainer;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -25,6 +26,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 
 import com.prism.aliyastoolkit.menu.BlueprintBoxMenu;
 
@@ -35,7 +37,7 @@ import com.prism.aliyastoolkit.menu.BlueprintBoxMenu;
  * 方块实体实现 {@link WorldlyContainer}，漏斗可以像普通箱子一样抽取；
  * 插入时通过面检查确保不会超过每格上限。
  */
-public class BlueprintBoxBlockEntity extends ChestBlockEntity implements WorldlyContainer {
+public class BlueprintBoxBlockEntity extends ChestBlockEntity implements WorldlyContainer, BlueprintBoxView {
     private NonNullList<ItemStack> items;
     private int[] limits;
     @Nullable
@@ -87,6 +89,23 @@ public class BlueprintBoxBlockEntity extends ChestBlockEntity implements Worldly
     @Override
     public int getContainerSize() {
         return this.items.size();
+    }
+
+    @Override
+    public int getCapacity() {
+        return this.items.size();
+    }
+
+    @Override
+    public BlueprintBoxReference reference() {
+        return BlueprintBoxReference.block(this.worldPosition);
+    }
+
+    @Override
+    public boolean stillValid(Player player) {
+        return this.level != null
+                && this.level.getBlockState(this.worldPosition).getBlock() instanceof BlueprintBoxBlock
+                && player.distanceToSqr(Vec3.atCenterOf(this.worldPosition)) <= 64.0D;
     }
 
     @Override

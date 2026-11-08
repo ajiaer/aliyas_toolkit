@@ -43,8 +43,8 @@ public class Config {
     public static final ModConfigSpec.BooleanValue ENABLE_COPY_PASTE = BUILDER
             .comment(
                     "Enable blueprint build.",
-                    "When enabled, pressing the blueprint-build key (default V) toggles the feature.",
-                    "Use blueprint boxes to record structures and build them elsewhere; crafting/copy-paste also works without a box.")
+                    "Hold a blueprint box and use the blueprint-build key (default Ctrl + right click) to enter; using an empty box opens draw mode.",
+                    "All blueprint shortcut keys can be changed in Options -> Controls -> Key Binds.")
             .define("enableCopyPaste", true);
 
     static final ModConfigSpec SPEC = BUILDER.build();

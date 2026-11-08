@@ -9,7 +9,6 @@ import java.util.Map;
 import java.util.OptionalDouble;
 import java.util.Set;
 
-import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -20,6 +19,7 @@ import com.prism.aliyastoolkit.AliyasToolkitClient;
 import com.prism.aliyastoolkit.ChainMining;
 import com.prism.aliyastoolkit.Config;
 import com.prism.aliyastoolkit.CopyPaste;
+import com.prism.aliyastoolkit.ToolkitSettingsCache;
 import com.prism.aliyastoolkit.blueprint.BlueprintBoxData;
 import com.prism.aliyastoolkit.blueprint.BlueprintBoxItem;
 import com.prism.aliyastoolkit.blueprint.BlueprintCapture;
@@ -30,6 +30,7 @@ import com.prism.aliyastoolkit.network.BlueprintCreatePayload;
 
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.LightTexture;
@@ -74,30 +75,40 @@ import org.lwjgl.opengl.GL11;
 /**
  * 客户端“蓝图建造”：
  * <ul>
- * <li>V：进入/退出选区模式。手里不能拿蓝图箱，右键多次划定区域，实时显示范围。</li>
- * <li>选区完成后，换成空蓝图箱（没有物品；可以已有蓝图），右键选区把结构收进箱子并退出。容量不够时提示换更高级的箱子且不退出。</li>
- * <li>手持带蓝图的蓝图箱，Ctrl+右键进入虚影预览；滚轮调整与玩家的距离，Tab 绕 Y 轴旋转。</li>
- * <li>右键固定虚影，左键取消固定；固定后再次右键确认建造。</li>
+ * <li>手持蓝图箱，按 Ctrl + 右键（默认，可改键）进入蓝图建造。没有蓝图进入绘制模式，
+ * 有蓝图进入建造模式。</li>
+ * <li>绘制模式：右键两次新增选区（浅橙色动态预览），左键两次删除选区（浅红色动态预览），
+ * 已确定选区为黄色；Ctrl + 右键记录蓝图、把物品收进箱子并退出。</li>
+ * <li>建造模式：显示虚影，右键固定、左键解除固定，滚轮调整距离，R 旋转；
+ * 固定后 Ctrl + 右键检查材料并建造（不足会提示并退出）。</li>
+ * <li>箱子没有物品时 Tab 切换绘制/建造模式；有物品时只能建造。</li>
+ * <li>旧的 V 蓝图快捷键已废弃，所有蓝图快捷键都可以在按键绑定里修改。</li>
  * </ul>
- * 旧的 Ctrl+C / Ctrl+X / Ctrl+V 快捷键已移除。
  */
 @EventBusSubscriber(modid = AliyasToolkit.MODID, value = Dist.CLIENT)
 public final class CopyPasteClient {
-    /** 选区轮廓：直接可见的黄色。 */
+    /** 已确定的选区轮廓：橙色。 */
     private static final float SELECTION_RED = 1.0F;
-    private static final float SELECTION_GREEN = 0.86F;
-    private static final float SELECTION_BLUE = 0.20F;
-    /** 选区轮廓：被方块挡住部分的暗黄色。 */
-    private static final float SELECTION_BEHIND_RED = 0.45F;
-    private static final float SELECTION_BEHIND_GREEN = 0.36F;
-    private static final float SELECTION_BEHIND_BLUE = 0.06F;
-    /** 正在动态预览的选区：亮黄色。 */
-    private static final float PENDING_SELECTION_RED = 1.0F;
-    private static final float PENDING_SELECTION_GREEN = 1.0F;
-    private static final float PENDING_SELECTION_BLUE = 0.18F;
-    private static final float PENDING_SELECTION_BEHIND_RED = 0.55F;
-    private static final float PENDING_SELECTION_BEHIND_GREEN = 0.55F;
-    private static final float PENDING_SELECTION_BEHIND_BLUE = 0.08F;
+    private static final float SELECTION_GREEN = 0.60F;
+    private static final float SELECTION_BLUE = 0.12F;
+    /** 选区轮廓：被方块挡住部分的暗橙色。 */
+    private static final float SELECTION_BEHIND_RED = 0.55F;
+    private static final float SELECTION_BEHIND_GREEN = 0.30F;
+    private static final float SELECTION_BEHIND_BLUE = 0.05F;
+    /** 正在动态预览的新增选区：浅黄色。 */
+    private static final float PENDING_ADD_RED = 1.0F;
+    private static final float PENDING_ADD_GREEN = 0.95F;
+    private static final float PENDING_ADD_BLUE = 0.55F;
+    private static final float PENDING_ADD_BEHIND_RED = 0.55F;
+    private static final float PENDING_ADD_BEHIND_GREEN = 0.52F;
+    private static final float PENDING_ADD_BEHIND_BLUE = 0.30F;
+    /** 正在动态预览的删除选区：浅红色。 */
+    private static final float PENDING_REMOVE_RED = 1.0F;
+    private static final float PENDING_REMOVE_GREEN = 0.55F;
+    private static final float PENDING_REMOVE_BLUE = 0.55F;
+    private static final float PENDING_REMOVE_BEHIND_RED = 0.55F;
+    private static final float PENDING_REMOVE_BEHIND_GREEN = 0.28F;
+    private static final float PENDING_REMOVE_BEHIND_BLUE = 0.28F;
     /** 预览轮廓：蓝色。 */
     private static final float PREVIEW_RED = 0.35F;
     private static final float PREVIEW_GREEN = 0.65F;
@@ -151,11 +162,15 @@ public final class CopyPasteClient {
 
     /** 已经划定的矩形区域。 */
     private static final List<Region> REGIONS = new ArrayList<>();
+    /** 已经删除的矩形区域（从选区并集中扣除）。 */
+    private static final List<Region> REMOVAL_REGIONS = new ArrayList<>();
     /** 选区里所有坐标（包含空气，便于右键点击判定）。 */
     private static List<BlockPos> selectionPositions = List.of();
     private static List<ChainMining.OutlineEdge> selectionOutline = List.of();
-    /** 正在等待第二个点的选区起点。 */
+    /** 正在等待第二个点的选区起点（右键新增）。 */
     private static BlockPos pendingPoint;
+    /** 正在等待第二个点的删除选区起点（左键删除）。 */
+    private static BlockPos pendingRemovalPoint;
 
     private enum Mode {
         NONE,
@@ -164,6 +179,16 @@ public final class CopyPasteClient {
     }
 
     private static Mode mode = Mode.NONE;
+
+    /** 当前动态预览的用途，用于决定轮廓颜色。 */
+    private enum PreviewKind {
+        NONE,
+        SELECTION_ADD,
+        SELECTION_REMOVE,
+        BUILD
+    }
+
+    private static PreviewKind previewKind = PreviewKind.NONE;
 
     /** 当前预览的蓝图（相对坐标、原始状态）。 */
     private static List<BlockPos> sourcePositions = List.of();
@@ -185,10 +210,9 @@ public final class CopyPasteClient {
     private static List<ChainMining.OutlineEdge> previewOutline = List.of();
     private static boolean previewInvalid;
     private static double placementDistance = DEFAULT_GHOST_DISTANCE;
-    /** 以当前指示器为中心，在半径 4 的球内寻找最近的可放置位置。 */
-    private static final int PLACEMENT_SEARCH_RADIUS = 4;
+    /** 以当前指示器为中心，在半径 8 的球内寻找最近的可放置位置。 */
+    private static final int PLACEMENT_SEARCH_RADIUS = CopyPaste.BLUEPRINT_PLACEMENT_SEARCH_RADIUS;
     private static final List<BlockPos> PLACEMENT_SEARCH_OFFSETS = buildPlacementSearchOffsets();
-    private static int noSpaceMessageCooldown;
     /** 没有合法位置时缓存 10 tick，避免每 tick 对大型蓝图重复做完整搜索。 */
     private static BlockPos lastNoSpaceTarget;
     private static int lastNoSpaceRotation = -1;
@@ -278,6 +302,7 @@ public final class CopyPasteClient {
 
     @SubscribeEvent
     static void onClientTick(ClientTickEvent.Pre event) {
+        clearBlueprintKeyClicks();
         Minecraft minecraft = Minecraft.getInstance();
         LocalPlayer player = minecraft.player;
         if (player == null || minecraft.level == null || minecraft.getConnection() == null) {
@@ -300,6 +325,16 @@ public final class CopyPasteClient {
         if (minecraft.screen != null) {
             return;
         }
+        // 主手蓝图箱被切换/数据变化后自动退出，避免虚影和实际蓝图不一致。
+        if (mode != Mode.NONE) {
+            ItemStack held = player.getMainHandItem();
+            if (!(held.getItem() instanceof BlueprintBoxItem)
+                    || !ItemStack.isSameItemSameComponents(previewBox, held)) {
+                message("message.aliyastoolkit.blueprint.box_changed");
+                forceDisable();
+                return;
+            }
+        }
         if (mode == Mode.SELECTING) {
             updateSelectionPreview(minecraft);
         } else if (mode == Mode.PLACING) {
@@ -316,13 +351,36 @@ public final class CopyPasteClient {
         if (event.getAction() != GLFW.GLFW_PRESS) {
             return;
         }
-        KeyMapping toggle = AliyasToolkitClient.COPY_PASTE_KEY;
-        if (toggle.matches(event.getKey(), event.getScanCode()) && toggle.isDown()) {
-            toggleFeature(minecraft);
+        if (matchesKey(AliyasToolkitClient.BLUEPRINT_BUILD_KEY, event)) {
+            if (mode == Mode.NONE) {
+                if (Config.ENABLE_COPY_PASTE.getAsBoolean()
+                        && minecraft.player.getMainHandItem().getItem() instanceof BlueprintBoxItem) {
+                    enterBlueprintMode(minecraft);
+                    minecraft.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                }
+            } else {
+                handleBlueprintTrigger(minecraft);
+            }
             return;
         }
-        if (mode == Mode.PLACING && event.getKey() == GLFW.GLFW_KEY_TAB) {
+        if (mode == Mode.NONE) {
+            return;
+        }
+        if (matchesKey(AliyasToolkitClient.BLUEPRINT_MODE_KEY, event)) {
+            // Tab 默认也是原版玩家列表：在蓝图模式里清掉它的点击，避免按 Tab 时闪出玩家列表。
+            minecraft.options.keyPlayerList.setDown(false);
+            while (minecraft.options.keyPlayerList.consumeClick()) {
+            }
+            switchMode(minecraft);
+            return;
+        }
+        if (matchesKey(AliyasToolkitClient.BLUEPRINT_ROTATE_KEY, event)) {
             rotate(minecraft);
+            return;
+        }
+        if (matchesKey(AliyasToolkitClient.BLUEPRINT_EXIT_KEY, event)) {
+            forceDisable();
+            message("message.aliyastoolkit.copy_paste_off");
         }
     }
 
@@ -336,10 +394,44 @@ public final class CopyPasteClient {
             return;
         }
 
-        KeyMapping toggle = AliyasToolkitClient.COPY_PASTE_KEY;
-        if (toggle.matchesMouse(event.getButton()) && toggle.isDown()) {
-            toggleFeature(minecraft);
+        // Alt + 右键交给 BlueprintBoxClient 打开蓝图箱界面。
+        if (matchesMouse(AliyasToolkitClient.BLUEPRINT_OPEN_BOX_KEY, event.getButton())) {
             return;
+        }
+
+        if (matchesMouse(AliyasToolkitClient.BLUEPRINT_BUILD_KEY, event.getButton())) {
+            if (mode == Mode.NONE) {
+                if (!Config.ENABLE_COPY_PASTE.getAsBoolean()
+                        || !(minecraft.player.getMainHandItem().getItem() instanceof BlueprintBoxItem)) {
+                    return;
+                }
+                event.setCanceled(true);
+                enterBlueprintMode(minecraft);
+            } else {
+                event.setCanceled(true);
+                handleBlueprintTrigger(minecraft);
+            }
+            minecraft.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+            return;
+        }
+
+        if (mode != Mode.NONE) {
+            if (matchesMouse(AliyasToolkitClient.BLUEPRINT_MODE_KEY, event.getButton())) {
+                event.setCanceled(true);
+                switchMode(minecraft);
+                return;
+            }
+            if (matchesMouse(AliyasToolkitClient.BLUEPRINT_ROTATE_KEY, event.getButton())) {
+                event.setCanceled(true);
+                rotate(minecraft);
+                return;
+            }
+            if (matchesMouse(AliyasToolkitClient.BLUEPRINT_EXIT_KEY, event.getButton())) {
+                event.setCanceled(true);
+                forceDisable();
+                message("message.aliyastoolkit.copy_paste_off");
+                return;
+            }
         }
 
         if (mode == Mode.PLACING) {
@@ -360,29 +452,21 @@ public final class CopyPasteClient {
                 event.setCanceled(true);
                 handleSelectionLeftClick(minecraft);
             }
-            return;
-        }
-
-        // 未进入选区模式时：手持蓝图箱 + Ctrl + 右键，直接进入虚影预览
-        if (event.getButton() == 1 && isControlDown(minecraft)
-                && minecraft.player.getMainHandItem().getItem() instanceof BlueprintBoxItem) {
-            event.setCanceled(true);
-            startPlacement(minecraft);
         }
     }
 
     @SubscribeEvent
     static void onMouseScroll(InputEvent.MouseScrollingEvent event) {
-        if (mode != Mode.PLACING) {
+        if (mode == Mode.NONE) {
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.screen != null || minecraft.player == null) {
             return;
         }
-        // 预览期间滚轮只调整距离，不切换快捷栏物品
+        // 蓝图模式期间滚轮不切换快捷栏；建造模式下用来调整虚影距离。
         event.setCanceled(true);
-        if (fixedTarget != null) {
+        if (mode != Mode.PLACING || fixedTarget != null) {
             return;
         }
         double delta = event.getScrollDeltaY();
@@ -410,19 +494,76 @@ public final class CopyPasteClient {
         }
     }
 
-    private static void toggleFeature(Minecraft minecraft) {
-        if (mode != Mode.NONE) {
-            forceDisable();
-            message("message.aliyastoolkit.copy_paste_off");
+    /** 手持蓝图箱按主按键：没有蓝图时进入绘制模式，否则进入建造模式。 */
+    private static void enterBlueprintMode(Minecraft minecraft) {
+        LocalPlayer player = minecraft.player;
+        if (player == null || minecraft.level == null || !Config.ENABLE_COPY_PASTE.getAsBoolean()) {
             return;
         }
-        if (!Config.ENABLE_COPY_PASTE.getAsBoolean() || minecraft.player == null) {
+        ItemStack held = player.getMainHandItem();
+        if (!(held.getItem() instanceof BlueprintBoxItem)) {
+            message("message.aliyastoolkit.blueprint.need_box");
+            return;
+        }
+        BlueprintData blueprint = BlueprintBoxData.readBlueprint(held, minecraft.level.registryAccess());
+        if (blueprint == null || blueprint.isEmpty()) {
+            startSelecting(minecraft);
+        } else {
+            startPlacement(minecraft);
+        }
+    }
+
+    /** 模式 1：蓝图绘制。 */
+    private static void startSelecting(Minecraft minecraft) {
+        LocalPlayer player = minecraft.player;
+        if (player == null || !Config.ENABLE_COPY_PASTE.getAsBoolean()) {
             return;
         }
         resetAll();
         mode = Mode.SELECTING;
+        previewBox = player.getMainHandItem().copy();
         ExclusiveModes.activate(ExclusiveModes.COPY_PASTE);
-        message("message.aliyastoolkit.copy_paste_on");
+        message("message.aliyastoolkit.blueprint.mode_draw");
+    }
+
+    /** 在没有物品的蓝图箱上切换绘制 / 建造模式。 */
+    private static void switchMode(Minecraft minecraft) {
+        LocalPlayer player = minecraft.player;
+        if (player == null || minecraft.level == null || mode == Mode.NONE) {
+            return;
+        }
+        ItemStack held = player.getMainHandItem();
+        if (!(held.getItem() instanceof BlueprintBoxItem)) {
+            message("message.aliyastoolkit.blueprint.need_box");
+            forceDisable();
+            return;
+        }
+        if (BlueprintBoxData.hasItems(held)) {
+            message("message.aliyastoolkit.blueprint.has_items_no_switch");
+            return;
+        }
+        if (mode == Mode.PLACING) {
+            startSelecting(minecraft);
+            message("message.aliyastoolkit.blueprint.mode_switched_draw");
+            return;
+        }
+        BlueprintData blueprint = BlueprintBoxData.readBlueprint(held, minecraft.level.registryAccess());
+        if (blueprint == null || blueprint.isEmpty()) {
+            message("message.aliyastoolkit.blueprint.no_blueprint");
+            return;
+        }
+        if (startPlacement(minecraft)) {
+            message("message.aliyastoolkit.blueprint.mode_switched_build");
+        }
+    }
+
+    /** Ctrl + 右键：绘制模式记录蓝图，建造模式检查材料并建造。 */
+    private static void handleBlueprintTrigger(Minecraft minecraft) {
+        if (mode == Mode.SELECTING) {
+            recordSelection(minecraft);
+        } else if (mode == Mode.PLACING) {
+            commitPlacement(minecraft);
+        }
     }
 
     /** 被其它互斥模式关闭，或玩家退出世界时调用。 */
@@ -433,10 +574,13 @@ public final class CopyPasteClient {
 
     private static void resetAll() {
         REGIONS.clear();
+        REMOVAL_REGIONS.clear();
         selectionPositions = List.of();
         selectionOutline = List.of();
         pendingPoint = null;
+        pendingRemovalPoint = null;
         mode = Mode.NONE;
+        previewKind = PreviewKind.NONE;
         sourcePositions = List.of();
         sourceStates = List.of();
         activeBlueprint = null;
@@ -452,7 +596,6 @@ public final class CopyPasteClient {
         previewOutline = List.of();
         previewInvalid = false;
         placementDistance = DEFAULT_GHOST_DISTANCE;
-        noSpaceMessageCooldown = 0;
         lastNoSpaceTarget = null;
         lastNoSpaceRotation = -1;
         noSpaceSearchCooldown = 0;
@@ -464,14 +607,46 @@ public final class CopyPasteClient {
         forceDisable();
     }
 
-    private static boolean isControlDown(Minecraft minecraft) {
-        long window = minecraft.getWindow().getWindow();
-        return InputConstants.isKeyDown(window, GLFW.GLFW_KEY_LEFT_CONTROL)
-                || InputConstants.isKeyDown(window, GLFW.GLFW_KEY_RIGHT_CONTROL);
+    private static boolean matchesKey(KeyMapping mapping, InputEvent.Key event) {
+        return mapping.matches(event.getKey(), event.getScanCode())
+                && mapping.getKeyModifier().isActive(mapping.getKeyConflictContext());
+    }
+
+    private static void clearBlueprintKeyClicks() {
+        while (AliyasToolkitClient.BLUEPRINT_BUILD_KEY.consumeClick()) {
+        }
+        while (AliyasToolkitClient.BLUEPRINT_MODE_KEY.consumeClick()) {
+        }
+        while (AliyasToolkitClient.BLUEPRINT_SNAP_KEY.consumeClick()) {
+        }
+        while (AliyasToolkitClient.BLUEPRINT_ROTATE_KEY.consumeClick()) {
+        }
+        while (AliyasToolkitClient.BLUEPRINT_EXIT_KEY.consumeClick()) {
+        }
+    }
+
+    private static boolean matchesMouse(KeyMapping mapping, int button) {
+        return mapping.matchesMouse(button)
+                && mapping.getKeyModifier().isActive(mapping.getKeyConflictContext());
     }
 
     private static double clamp(double value, double min, double max) {
         return value < min ? min : Math.min(value, max);
+    }
+
+    private static int countEmptyBuckets(LocalPlayer player) {
+        int count = 0;
+        for (int slot = 0; slot < 36; slot++) {
+            ItemStack stack = player.getInventory().getItem(slot);
+            if (stack.is(net.minecraft.world.item.Items.BUCKET)) {
+                count += stack.getCount();
+            }
+        }
+        ItemStack offhand = player.getOffhandItem();
+        if (offhand.is(net.minecraft.world.item.Items.BUCKET)) {
+            count += offhand.getCount();
+        }
+        return count;
     }
 
     // ---------------------------------------------------------------------
@@ -479,19 +654,19 @@ public final class CopyPasteClient {
     // ---------------------------------------------------------------------
 
     private static void handleSelectionRightClick(Minecraft minecraft) {
-        LocalPlayer player = minecraft.player;
-        if (player == null) {
+        if (minecraft.player == null) {
             return;
         }
-        ItemStack held = player.getMainHandItem();
-        if (held.getItem() instanceof BlueprintBoxItem boxItem) {
-            storeSelectionIntoBox(minecraft, held, boxItem);
+        // 右键是“新增”：先取消正在进行的删除预览。
+        if (pendingRemovalPoint != null) {
+            pendingRemovalPoint = null;
+            updateSelectionPreview(minecraft);
+            message("message.aliyastoolkit.copy_paste_pending_cancelled");
             return;
         }
 
         BlockPos target = pickTarget(minecraft);
         if (target == null) {
-            message("message.aliyastoolkit.copy_paste_no_target");
             return;
         }
         if (pendingPoint == null) {
@@ -506,9 +681,12 @@ public final class CopyPasteClient {
         updateSelectionPreview(minecraft);
     }
 
+    /**
+     * 左键是“删除”：第一次选起点，第二次确定一个删除范围，
+     * 黄色已选区里被这个范围覆盖的部分会被取消。可反复删除。
+     */
     private static void handleSelectionLeftClick(Minecraft minecraft) {
-        LocalPlayer player = minecraft.player;
-        if (player == null) {
+        if (minecraft.player == null) {
             return;
         }
         if (pendingPoint != null) {
@@ -521,14 +699,18 @@ public final class CopyPasteClient {
         if (target == null) {
             return;
         }
-        for (int i = 0; i < REGIONS.size(); i++) {
-            if (REGIONS.get(i).contains(target)) {
-                REGIONS.remove(i);
-                rebuildSelection();
-                updateSelectionPreview(minecraft);
-                message("message.aliyastoolkit.copy_paste_regions_removed", 1);
-                return;
-            }
+        if (pendingRemovalPoint == null) {
+            pendingRemovalPoint = target;
+            updateSelectionPreview(minecraft);
+            message("message.aliyastoolkit.copy_paste_remove_first_point");
+            return;
+        }
+        int before = selectionPositions.size();
+        if (addRemovalRegion(pendingRemovalPoint, target)) {
+            pendingRemovalPoint = null;
+            updateSelectionPreview(minecraft);
+            message("message.aliyastoolkit.copy_paste_regions_removed",
+                    Math.max(0, before - selectionPositions.size()));
         }
     }
 
@@ -543,6 +725,9 @@ public final class CopyPasteClient {
             existing.collectInto(union);
         }
         region.collectInto(union);
+        for (Region removal : REMOVAL_REGIONS) {
+            union.removeIf(removal::contains);
+        }
         if (union.size() > CopyPaste.MAX_VOLUME) {
             message("message.aliyastoolkit.copy_paste_too_big", CopyPaste.MAX_VOLUME);
             return false;
@@ -553,23 +738,43 @@ public final class CopyPasteClient {
         return true;
     }
 
+    private static boolean addRemovalRegion(BlockPos first, BlockPos second) {
+        Region region = new Region(first, second);
+        if (region.volume() > CopyPaste.MAX_VOLUME) {
+            message("message.aliyastoolkit.copy_paste_too_big", CopyPaste.MAX_VOLUME);
+            return false;
+        }
+        REMOVAL_REGIONS.add(region);
+        rebuildSelection();
+        return true;
+    }
+
     private static void rebuildSelection() {
         Set<BlockPos> union = new LinkedHashSet<>();
         for (Region region : REGIONS) {
             region.collectInto(union);
+        }
+        for (Region removal : REMOVAL_REGIONS) {
+            union.removeIf(removal::contains);
         }
         selectionPositions = List.copyOf(union);
         selectionOutline = union.isEmpty() ? List.of() : ChainMining.collectOutlineEdges(union);
     }
 
     /**
-     * 把当前选区收进主手的蓝图箱。
+     * Ctrl + 右键：把当前选区收进主手的蓝图箱。
      * 箱子必须没有物品；可以已经存有蓝图（会被新蓝图覆盖）。
-     * 容量不够时只提示，不退出选区模式。
+     * 容量不够时只提示，不退出绘制模式。
      */
-    private static void storeSelectionIntoBox(Minecraft minecraft, ItemStack held, BlueprintBoxItem boxItem) {
+    private static void recordSelection(Minecraft minecraft) {
         LocalPlayer player = minecraft.player;
         if (player == null || minecraft.level == null) {
+            return;
+        }
+        ItemStack held = player.getMainHandItem();
+        if (!(held.getItem() instanceof BlueprintBoxItem boxItem)) {
+            message("message.aliyastoolkit.blueprint.need_box");
+            forceDisable();
             return;
         }
         if (selectionPositions.isEmpty()) {
@@ -578,11 +783,6 @@ public final class CopyPasteClient {
         }
         if (!BlueprintBoxData.isEmpty(held)) {
             message("message.aliyastoolkit.blueprint.not_empty");
-            return;
-        }
-        BlockPos target = pickTarget(minecraft);
-        if (target == null || !selectionPositions.contains(target)) {
-            message("message.aliyastoolkit.blueprint.click_selection");
             return;
         }
 
@@ -599,11 +799,20 @@ public final class CopyPasteClient {
         }
 
         BlueprintCreatePayload payload = BlueprintCreatePayload.of(true, positions);
+        boolean collectFluids = ToolkitSettingsCache.get().collectFluids();
         BlueprintCapture.Result result = BlueprintCapture.capture(minecraft.level, payload.min(),
-                payload.offsets(), player);
+                payload.offsets(), player, collectFluids);
+        if (collectFluids && result.blueprint() != null
+                && result.blueprint().fluidSourceCount() > countEmptyBuckets(player)) {
+            result = BlueprintCapture.capture(minecraft.level, payload.min(), payload.offsets(), player, false);
+        }
         if (result.errorKey() != null || result.blueprint() == null) {
-            message(result.errorKey() == null
-                    ? "message.aliyastoolkit.copy_paste_no_blocks" : result.errorKey());
+            if (result.skippedBlueprintBoxes() > 0) {
+                message("message.aliyastoolkit.blueprint.only_boxes_skipped", result.skippedBlueprintBoxes());
+            } else {
+                message(result.errorKey() == null
+                        ? "message.aliyastoolkit.copy_paste_no_blocks" : result.errorKey());
+            }
             return;
         }
         int capacity = boxItem.capacity();
@@ -633,7 +842,7 @@ public final class CopyPasteClient {
             return false;
         }
         ItemStack held = player.getMainHandItem();
-        if (!(held.getItem() instanceof BlueprintBoxItem boxItem)) {
+        if (!(held.getItem() instanceof BlueprintBoxItem)) {
             message("message.aliyastoolkit.blueprint.need_box");
             return false;
         }
@@ -646,12 +855,10 @@ public final class CopyPasteClient {
             message("message.aliyastoolkit.copy_paste_too_big", CopyPaste.MAX_VOLUME);
             return false;
         }
-        if (!BlueprintBoxData.hasEnoughItems(held, blueprint, boxItem.capacity())) {
-            message("message.aliyastoolkit.blueprint.not_enough");
-            return false;
-        }
-
+        // 材料不足也允许进入建造预览；真正建造时再检查并提示。
+        resetAll();
         mode = Mode.PLACING;
+        previewKind = PreviewKind.BUILD;
         activeBlueprint = blueprint;
         previewBox = held.copy();
         sourcePositions = blueprint.previewPositions();
@@ -663,28 +870,26 @@ public final class CopyPasteClient {
         placementDistance = DEFAULT_GHOST_DISTANCE;
         fixedTarget = null;
         previewTarget = null;
-        pendingPoint = null;
-        REGIONS.clear();
-        selectionPositions = List.of();
-        selectionOutline = List.of();
         ExclusiveModes.activate(ExclusiveModes.COPY_PASTE);
+        // 玩家与虚影的碰撞只在刚放出虚影时检测一次，之后不再把虚影从玩家身边推开，
+        // 保证刚打开时能一眼看到完整结构。
+        ensureSafeDistance(minecraft);
         updatePlacementPreview(minecraft);
-        message("message.aliyastoolkit.blueprint.preview");
+        message("message.aliyastoolkit.blueprint.mode_build");
         return true;
     }
 
     private static void handlePlacementRightClick(Minecraft minecraft) {
-        if (fixedTarget == null) {
-            if (previewTarget == null || previewPositions.isEmpty()) {
-                message("message.aliyastoolkit.copy_paste_no_target");
-                return;
-            }
-            fixedTarget = previewTarget.immutable();
-            updatePlacementPreview(minecraft);
-            message("message.aliyastoolkit.blueprint.pinned");
+        if (fixedTarget != null) {
+            message("message.aliyastoolkit.blueprint.already_pinned");
             return;
         }
-        commitPlacement(minecraft);
+        if (previewTarget == null || previewPositions.isEmpty()) {
+            return;
+        }
+        fixedTarget = previewTarget.immutable();
+        updatePlacementPreview(minecraft);
+        message("message.aliyastoolkit.blueprint.pinned");
     }
 
     private static void handlePlacementLeftClick(Minecraft minecraft) {
@@ -712,6 +917,7 @@ public final class CopyPasteClient {
         if (mode != Mode.PLACING) {
             return;
         }
+        previewKind = PreviewKind.BUILD;
         LocalPlayer player = minecraft.player;
         if (player == null || sourcePositions.isEmpty()) {
             clearPreview();
@@ -722,12 +928,6 @@ public final class CopyPasteClient {
             message("message.aliyastoolkit.blueprint.box_changed");
             forceDisable();
             return;
-        }
-        if (noSpaceMessageCooldown > 0) {
-            noSpaceMessageCooldown--;
-        }
-        if (fixedTarget == null) {
-            ensureSafeDistance(minecraft);
         }
         if (noSpaceSearchCooldown > 0) {
             noSpaceSearchCooldown--;
@@ -756,10 +956,6 @@ public final class CopyPasteClient {
         if (target == null) {
             clearPreview();
             previewInvalid = true;
-            if (noSpaceMessageCooldown <= 0) {
-                message("message.aliyastoolkit.blueprint.no_space", PLACEMENT_SEARCH_RADIUS);
-                noSpaceMessageCooldown = 40;
-            }
             return;
         }
 
@@ -805,25 +1001,24 @@ public final class CopyPasteClient {
         if (rawTarget == null) {
             return null;
         }
-        AABB playerBox = player.getBoundingBox().inflate(0.05D);
         for (BlockPos offset : PLACEMENT_SEARCH_OFFSETS) {
             BlockPos candidate = rawTarget.offset(offset);
-            if (canPlaceBlueprintAt(player.level(), playerBox, candidate)) {
+            if (canPlaceBlueprintAt(player.level(), candidate)) {
                 return candidate;
             }
         }
         return null;
     }
 
-    /** 所有蓝图目标方块都必须可替换，且整体不能碰到玩家。 */
-    private static boolean canPlaceBlueprintAt(net.minecraft.world.level.Level level, AABB playerBox,
-            BlockPos target) {
+    /**
+     * 所有蓝图目标方块都必须可替换。
+     * <p>
+     * 玩家与虚影的碰撞只在 {@link #startPlacement} 刚放出虚影时由
+     * {@link #ensureSafeDistance} 检测一次，之后这里不再检查，保证移动视角时虚影不会突然被推开。
+     */
+    private static boolean canPlaceBlueprintAt(net.minecraft.world.level.Level level, BlockPos target) {
         List<BlockPos> destinations = computeDestinations(target);
         if (destinations.isEmpty()) {
-            return false;
-        }
-        AABB bounds = boundsOf(destinations);
-        if (bounds != null && bounds.intersects(playerBox)) {
             return false;
         }
         if (!level.isLoaded(target) || !level.getBlockState(target).canBeReplaced()) {
@@ -878,6 +1073,7 @@ public final class CopyPasteClient {
         previewStates = List.of();
         previewOutline = List.of();
         previewInvalid = false;
+        previewKind = PreviewKind.NONE;
     }
 
     private static void commitPlacement(Minecraft minecraft) {
@@ -902,7 +1098,8 @@ public final class CopyPasteClient {
             return;
         }
         if (!BlueprintBoxData.hasEnoughItems(held, blueprint, boxItem.capacity())) {
-            message("message.aliyastoolkit.blueprint.not_enough");
+            message("message.aliyastoolkit.blueprint.not_enough_exit");
+            forceDisable();
             return;
         }
 
@@ -960,7 +1157,9 @@ public final class CopyPasteClient {
         if (mode != Mode.SELECTING || minecraft.level == null) {
             return;
         }
-        if (pendingPoint == null) {
+        boolean removing = pendingPoint == null && pendingRemovalPoint != null;
+        BlockPos base = pendingPoint != null ? pendingPoint : pendingRemovalPoint;
+        if (base == null) {
             clearPreview();
             return;
         }
@@ -969,8 +1168,9 @@ public final class CopyPasteClient {
             clearPreview();
             return;
         }
-        Region region = new Region(pendingPoint, target);
+        Region region = new Region(base, target);
         previewTarget = target;
+        previewKind = removing ? PreviewKind.SELECTION_REMOVE : PreviewKind.SELECTION_ADD;
         if (region.volume() > CopyPaste.MAX_VOLUME) {
             previewPositions = List.of();
             previewStates = List.of();
@@ -998,11 +1198,33 @@ public final class CopyPasteClient {
         }
         HitResult hit = minecraft.hitResult;
         if (hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK) {
-            return blockHit.getBlockPos().immutable();
+            BlockPos hitPos = blockHit.getBlockPos();
+            // 按住吸附键（默认 Shift）时取指向方块的外侧面，和快速建造的选点一致。
+            if (isSnapKeyDown()) {
+                BlockPos adjacent = hitPos.relative(blockHit.getDirection());
+                if (isReplaceable(minecraft.level, adjacent)) {
+                    return adjacent.immutable();
+                }
+                if (isReplaceable(minecraft.level, hitPos)) {
+                    return hitPos.immutable();
+                }
+                return adjacent.immutable();
+            }
+            return hitPos.immutable();
         }
         Vec3 eye = player.getEyePosition(1.0F);
         Vec3 look = player.getViewVector(1.0F);
         return BlockPos.containing(eye.add(look.scale(2.0D)));
+    }
+
+    private static boolean isReplaceable(net.minecraft.world.level.Level level, BlockPos pos) {
+        return level != null && (level.getBlockState(pos).isAir() || level.getBlockState(pos).canBeReplaced());
+    }
+
+    /** 吸附键默认是 Shift：默认配置下左右 Shift 都生效；改键后只使用改后的键。 */
+    private static boolean isSnapKeyDown() {
+        return AliyasToolkitClient.BLUEPRINT_SNAP_KEY.isDown()
+                || (AliyasToolkitClient.BLUEPRINT_SNAP_KEY.isDefault() && Screen.hasShiftDown());
     }
 
     private static void message(String key, Object... args) {
@@ -1025,7 +1247,7 @@ public final class CopyPasteClient {
         if (mode == Mode.NONE || minecraft.level == null) {
             return;
         }
-        if (selectionOutline.isEmpty() && previewOutline.isEmpty() && pendingPoint == null) {
+        if (selectionOutline.isEmpty() && previewOutline.isEmpty()) {
             return;
         }
 
@@ -1041,10 +1263,13 @@ public final class CopyPasteClient {
             renderGhostBlocks(poseStack, buffers, previewPositions, previewStates,
                     1.0F, 1.0F, 1.0F, previewInvalid ? 0.20F : 0.35F);
         }
-        // 选区还没确定第二点时，用更淡的虚影实时预览范围
+        // 选区还没确定第二点时，用更淡的虚影实时预览范围：扩选偏浅黄，缩选偏浅红。
         if (mode == Mode.SELECTING && pendingPoint != null && !previewPositions.isEmpty()) {
             renderGhostBlocks(poseStack, buffers, previewPositions, previewStates,
-                    0.85F, 0.92F, 1.0F, 0.22F);
+                    1.0F, 0.98F, 0.82F, 0.22F);
+        } else if (mode == Mode.SELECTING && pendingRemovalPoint != null && !previewPositions.isEmpty()) {
+            renderGhostBlocks(poseStack, buffers, previewPositions, previewStates,
+                    1.0F, 0.82F, 0.82F, 0.22F);
         }
 
         // 先画被方块挡住部分的暗色描边
@@ -1053,14 +1278,19 @@ public final class CopyPasteClient {
             renderEdge(poseStack, behind, edge,
                     SELECTION_BEHIND_RED, SELECTION_BEHIND_GREEN, SELECTION_BEHIND_BLUE);
         }
-        // 已确定的选区用黄色；正在跟随准星的动态选区用更亮的黄色。
-        boolean selectingPending = mode == Mode.SELECTING;
+        // 已确定的选区始终是黄色；动态预览颜色优先级更高，覆盖在黄色之上。
         float behindRed = previewInvalid ? INVALID_BEHIND_RED
-                : selectingPending ? PENDING_SELECTION_BEHIND_RED : PREVIEW_BEHIND_RED;
+                : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_BEHIND_RED
+                : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_BEHIND_RED
+                : PREVIEW_BEHIND_RED;
         float behindGreen = previewInvalid ? INVALID_BEHIND_GREEN
-                : selectingPending ? PENDING_SELECTION_BEHIND_GREEN : PREVIEW_BEHIND_GREEN;
+                : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_BEHIND_GREEN
+                : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_BEHIND_GREEN
+                : PREVIEW_BEHIND_GREEN;
         float behindBlue = previewInvalid ? INVALID_BEHIND_BLUE
-                : selectingPending ? PENDING_SELECTION_BEHIND_BLUE : PREVIEW_BEHIND_BLUE;
+                : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_BEHIND_BLUE
+                : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_BEHIND_BLUE
+                : PREVIEW_BEHIND_BLUE;
         for (ChainMining.OutlineEdge edge : previewOutline) {
             renderEdge(poseStack, behind, edge, behindRed, behindGreen, behindBlue);
         }
@@ -1072,11 +1302,17 @@ public final class CopyPasteClient {
             renderEdge(poseStack, front, edge, SELECTION_RED, SELECTION_GREEN, SELECTION_BLUE);
         }
         float frontRed = previewInvalid ? INVALID_RED
-                : selectingPending ? PENDING_SELECTION_RED : PREVIEW_RED;
+                : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_RED
+                : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_RED
+                : PREVIEW_RED;
         float frontGreen = previewInvalid ? INVALID_GREEN
-                : selectingPending ? PENDING_SELECTION_GREEN : PREVIEW_GREEN;
+                : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_GREEN
+                : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_GREEN
+                : PREVIEW_GREEN;
         float frontBlue = previewInvalid ? INVALID_BLUE
-                : selectingPending ? PENDING_SELECTION_BLUE : PREVIEW_BLUE;
+                : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_BLUE
+                : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_BLUE
+                : PREVIEW_BLUE;
         for (ChainMining.OutlineEdge edge : previewOutline) {
             renderEdge(poseStack, front, edge, frontRed, frontGreen, frontBlue);
         }

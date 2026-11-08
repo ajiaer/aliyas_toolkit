@@ -23,7 +23,7 @@ import net.minecraft.util.Mth;
  */
 public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int swapRow,
         List<ChainPreset> presets, int selectedPreset, boolean allowBreakingOtherBlocks,
-        List<BuildPreset> buildPresets, int selectedBuildPreset) {
+        List<BuildPreset> buildPresets, int selectedBuildPreset, boolean collectFluids) {
     /** 连锁数量最小值。 */
     public static final int MIN_CHAIN_LIMIT = 1;
     /** 连锁数量最大值。 */
@@ -41,9 +41,9 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
     /** 新预设的默认名称前缀：预设1、预设2…… */
     public static final String DEFAULT_PRESET_NAME_PREFIX = PresetNames.DEFAULT_PREFIX;
 
-    /** 新玩家的默认设置：物品完全一致、连锁 64 个、交换最后一行、各一个默认预设、允许破坏其它方块。 */
+    /** 新玩家的默认设置：物品完全一致、连锁 64 个、交换最后一行、各一个默认预设、允许破坏其它方块、自动收集流体。 */
     public static final ToolkitSettings DEFAULT = new ToolkitSettings(true, DEFAULT_CHAIN_LIMIT, DEFAULT_SWAP_ROW,
-            List.of(ChainPreset.DEFAULT), 0, true, List.of(BuildPreset.DEFAULT), 0);
+            List.of(ChainPreset.DEFAULT), 0, true, List.of(BuildPreset.DEFAULT), 0, true);
 
     /** 存档用的编解码器（字段都带默认值，老的玩家数据也能读）。 */
     public static final Codec<ToolkitSettings> CODEC = RecordCodecBuilder.create(instance -> instance.group(
@@ -62,7 +62,9 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
                     BuildPreset.CODEC.listOf().optionalFieldOf("build_presets", List.of(BuildPreset.DEFAULT))
                             .forGetter(ToolkitSettings::buildPresets),
                     Codec.INT.optionalFieldOf("selected_build_preset", 0)
-                            .forGetter(ToolkitSettings::selectedBuildPreset))
+                            .forGetter(ToolkitSettings::selectedBuildPreset),
+                    Codec.BOOL.optionalFieldOf("collect_fluids", true)
+                            .forGetter(ToolkitSettings::collectFluids))
             .apply(instance, ToolkitSettings::new));
 
     /** 网络同步用的编解码器（字段较多，手动编解码）。 */
@@ -82,6 +84,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
                     BuildPreset.STREAM_CODEC.encode(buffer, preset);
                 }
                 buffer.writeVarInt(value.selectedBuildPreset());
+                buffer.writeBoolean(value.collectFluids());
             },
             buffer -> {
                 boolean exactMatch = buffer.readBoolean();
@@ -100,8 +103,9 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
                     buildPresets.add(BuildPreset.STREAM_CODEC.decode(buffer));
                 }
                 int selectedBuildPreset = buffer.readVarInt();
+                boolean collectFluids = buffer.readBoolean();
                 return new ToolkitSettings(exactMatch, chainLimit, swapRow, presets, selectedPreset,
-                        allowOtherBlocks, buildPresets, selectedBuildPreset);
+                        allowOtherBlocks, buildPresets, selectedBuildPreset, collectFluids);
             });
 
     public ToolkitSettings {
@@ -156,24 +160,33 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
 
     public ToolkitSettings withRequireExactItemMatch(boolean value) {
         return new ToolkitSettings(value, this.chainLimit, this.swapRow, this.presets, this.selectedPreset,
-                this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset);
+                this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset, this.collectFluids);
     }
 
     public ToolkitSettings withChainLimit(int limit) {
         return new ToolkitSettings(this.requireExactItemMatch, limit, this.swapRow, this.presets,
-                this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset);
+                this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset,
+                this.collectFluids);
     }
 
     /** “交换行”：与快捷栏交换的背包行（1-3，超出范围会被夹到合法值）。 */
     public ToolkitSettings withSwapRow(int row) {
         return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, row, this.presets,
-                this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset);
+                this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset,
+                this.collectFluids);
     }
 
     /** 大量方块的连锁范围里是否也破坏“非指向”的方块。 */
     public ToolkitSettings withAllowBreakingOtherBlocks(boolean value) {
         return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
-                this.selectedPreset, value, this.buildPresets, this.selectedBuildPreset);
+                this.selectedPreset, value, this.buildPresets, this.selectedBuildPreset, this.collectFluids);
+    }
+
+    /** 是否在制作蓝图时自动收集可用桶接取的流体源头。 */
+    public ToolkitSettings withCollectFluids(boolean value) {
+        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
+                this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset,
+                value);
     }
 
     /** 修改“当前预设”的内容。 */
@@ -181,7 +194,8 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
         List<ChainPreset> copy = new ArrayList<>(this.presets);
         copy.set(this.selectedPreset, preset);
         return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, copy,
-                this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset);
+                this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset,
+                this.collectFluids);
     }
 
     /** 修改“当前大量方块预设”的名称。 */
@@ -192,7 +206,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
     /** 切换到指定预设（超出范围会被夹到合法值）。 */
     public ToolkitSettings withSelectedPreset(int index) {
         return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets, index,
-                this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset);
+                this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset, this.collectFluids);
     }
 
     /** 复制当前预设并新建一个（名称自动取“预设N”；达到上限时不做任何事）。 */
@@ -203,7 +217,8 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
         List<ChainPreset> copy = new ArrayList<>(this.presets);
         copy.add(this.preset().withName(this.nextChainPresetName()));
         return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, copy,
-                copy.size() - 1, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset);
+                copy.size() - 1, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset,
+                this.collectFluids);
     }
 
     /** 删除当前预设（至少保留 1 个）。 */
@@ -215,7 +230,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
         copy.remove(this.selectedPreset);
         return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, copy,
                 Math.min(this.selectedPreset, copy.size() - 1), this.allowBreakingOtherBlocks,
-                this.buildPresets, this.selectedBuildPreset);
+                this.buildPresets, this.selectedBuildPreset, this.collectFluids);
     }
 
     /** 当前选中的“快速建造”预设。 */
@@ -228,7 +243,8 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
         List<BuildPreset> copy = new ArrayList<>(this.buildPresets);
         copy.set(this.selectedBuildPreset, preset);
         return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
-                this.selectedPreset, this.allowBreakingOtherBlocks, copy, this.selectedBuildPreset);
+                this.selectedPreset, this.allowBreakingOtherBlocks, copy, this.selectedBuildPreset,
+                this.collectFluids);
     }
 
     /** 修改“当前快速建造预设”的名称。 */
@@ -239,7 +255,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
     /** 切换到指定快速建造预设（超出范围会被夹到合法值）。 */
     public ToolkitSettings withSelectedBuildPreset(int index) {
         return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
-                this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, index);
+                this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, index, this.collectFluids);
     }
 
     /** 复制当前快速建造预设并新建一个（名称自动取“预设N”；达到上限时不做任何事）。 */
@@ -250,7 +266,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
         List<BuildPreset> copy = new ArrayList<>(this.buildPresets);
         copy.add(this.buildPreset().withName(this.nextBuildPresetName()));
         return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
-                this.selectedPreset, this.allowBreakingOtherBlocks, copy, copy.size() - 1);
+                this.selectedPreset, this.allowBreakingOtherBlocks, copy, copy.size() - 1, this.collectFluids);
     }
 
     /** 删除当前快速建造预设（至少保留 1 个）。 */
@@ -262,7 +278,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
         copy.remove(this.selectedBuildPreset);
         return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
                 this.selectedPreset, this.allowBreakingOtherBlocks, copy,
-                Math.min(this.selectedBuildPreset, copy.size() - 1));
+                Math.min(this.selectedBuildPreset, copy.size() - 1), this.collectFluids);
     }
 
     /** 下一个未被占用的默认名称：“预设1”“预设2”…… */

@@ -92,7 +92,9 @@ public class BlueprintBoxBlock extends ChestBlock {
             if (player instanceof ServerPlayer serverPlayer) {
                 serverPlayer.openMenu(new SimpleMenuProvider(
                         (containerId, inventory, p) -> new BlueprintBoxMenu(containerId, inventory, box),
-                        box.getDisplayName()), buffer -> buffer.writeBlockPos(pos));
+                        box.getDisplayName()),
+                        buffer -> BlueprintBoxReference.STREAM_CODEC.encode(buffer,
+                                BlueprintBoxReference.block(pos)));
             }
         }
         return InteractionResult.CONSUME;

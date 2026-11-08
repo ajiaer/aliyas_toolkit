@@ -1,9 +1,9 @@
 package com.prism.aliyastoolkit.network;
 
 import com.prism.aliyastoolkit.AliyasToolkit;
+import com.prism.aliyastoolkit.blueprint.BlueprintBoxReference;
 import com.prism.aliyastoolkit.menu.BlueprintBoxMenu;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -18,13 +18,13 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
  * 菜单只包含可见槽位；服务端更新槽位对应的容器索引后广播一次变化，
  * 保证之后点击的槽位在两边映射一致。
  */
-public record BlueprintScrollPayload(BlockPos pos, int row) implements CustomPacketPayload {
+public record BlueprintScrollPayload(BlueprintBoxReference reference, int row) implements CustomPacketPayload {
     public static final Type<BlueprintScrollPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(AliyasToolkit.MODID, "blueprint_scroll"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, BlueprintScrollPayload> STREAM_CODEC =
             StreamCodec.composite(
-                    BlockPos.STREAM_CODEC, BlueprintScrollPayload::pos,
+                    BlueprintBoxReference.STREAM_CODEC, BlueprintScrollPayload::reference,
                     ByteBufCodecs.VAR_INT, BlueprintScrollPayload::row,
                     BlueprintScrollPayload::new);
 
@@ -41,7 +41,7 @@ public record BlueprintScrollPayload(BlockPos pos, int row) implements CustomPac
             if (!(player.containerMenu instanceof BlueprintBoxMenu menu)) {
                 return;
             }
-            if (!menu.getBox().getBlockPos().equals(payload.pos())) {
+            if (!menu.getReference().equals(payload.reference())) {
                 return;
             }
             menu.setScrollRow(payload.row());

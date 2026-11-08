@@ -2,11 +2,11 @@ package com.prism.aliyastoolkit.network;
 
 import com.prism.aliyastoolkit.AliyasToolkit;
 import com.prism.aliyastoolkit.InventorySync;
-import com.prism.aliyastoolkit.blueprint.BlueprintBoxBlockEntity;
 import com.prism.aliyastoolkit.blueprint.BlueprintBoxItem;
+import com.prism.aliyastoolkit.blueprint.BlueprintBoxReference;
+import com.prism.aliyastoolkit.blueprint.BlueprintBoxView;
 import com.prism.aliyastoolkit.menu.BlueprintBoxMenu;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -14,9 +14,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
@@ -27,7 +25,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
  * <li>{@link #STORE_ALL}：把背包里符合占位要求的物品放入箱子，最多到每格上限。</li>
  * </ul>
  */
-public record BlueprintBoxActionPayload(BlockPos pos, int action) implements CustomPacketPayload {
+public record BlueprintBoxActionPayload(BlueprintBoxReference reference, int action) implements CustomPacketPayload {
     public static final int CLEAR_BLUEPRINT = 0;
     public static final int TAKE_ALL = 1;
     public static final int STORE_ALL = 2;
@@ -37,7 +35,7 @@ public record BlueprintBoxActionPayload(BlockPos pos, int action) implements Cus
 
     public static final StreamCodec<RegistryFriendlyByteBuf, BlueprintBoxActionPayload> STREAM_CODEC =
             StreamCodec.composite(
-                    BlockPos.STREAM_CODEC, BlueprintBoxActionPayload::pos,
+                    BlueprintBoxReference.STREAM_CODEC, BlueprintBoxActionPayload::reference,
                     ByteBufCodecs.VAR_INT, BlueprintBoxActionPayload::action,
                     BlueprintBoxActionPayload::new);
 
@@ -54,8 +52,8 @@ public record BlueprintBoxActionPayload(BlockPos pos, int action) implements Cus
             if (!(player.containerMenu instanceof BlueprintBoxMenu menu)) {
                 return;
             }
-            BlueprintBoxBlockEntity box = menu.getBox();
-            if (!box.getBlockPos().equals(payload.pos()) || !box.stillValid(player)) {
+            BlueprintBoxView box = menu.getBox();
+            if (!menu.getReference().equals(payload.reference()) || !box.stillValid(player)) {
                 return;
             }
             switch (payload.action()) {
@@ -87,7 +85,7 @@ public record BlueprintBoxActionPayload(BlockPos pos, int action) implements Cus
     }
 
     /** 清空蓝图时使用：把箱子里所有物品放进背包；放不下的掉落。 */
-    private static void takeAll(ServerPlayer player, BlueprintBoxBlockEntity box) {
+    private static void takeAll(ServerPlayer player, BlueprintBoxView box) {
         for (int slot = 0; slot < box.getContainerSize(); slot++) {
             ItemStack stack = box.removeItemNoUpdate(slot);
             giveOrDrop(player, stack);
@@ -98,7 +96,7 @@ public record BlueprintBoxActionPayload(BlockPos pos, int action) implements Cus
     /**
      * 一键取出：能放进玩家背包的物品移走，背包/物品栏满时多余部分留在原槽位。
      */
-    private static void takeAllKeepRemainder(ServerPlayer player, BlueprintBoxBlockEntity box) {
+    private static void takeAllKeepRemainder(ServerPlayer player, BlueprintBoxView box) {
         for (int slot = 0; slot < box.getContainerSize(); slot++) {
             ItemStack stack = box.getItem(slot);
             if (stack.isEmpty()) {
@@ -112,7 +110,7 @@ public record BlueprintBoxActionPayload(BlockPos pos, int action) implements Cus
     }
 
     /** 把背包里符合占位要求的物品放进箱子，最多到每格上限。 */
-    private static void storeAll(ServerPlayer player, BlueprintBoxBlockEntity box) {
+    private static void storeAll(ServerPlayer player, BlueprintBoxView box) {
         for (int slot = 0; slot < box.getContainerSize(); slot++) {
             int limit = box.getLimit(slot);
             var def = box.getSlotDef(slot);

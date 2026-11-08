@@ -16,6 +16,9 @@ public final class CopyPaste {
     /** 绕 Y 轴旋转的 4 个方向（0 = 不旋转，每 +1 顺时针 90°）。 */
     public static final int ROTATIONS = 4;
 
+    /** 蓝图建造虚影：在指示器周围寻找合法位置的球半径。 */
+    public static final int BLUEPRINT_PLACEMENT_SEARCH_RADIUS = 8;
+
     private CopyPaste() {
     }
 }
