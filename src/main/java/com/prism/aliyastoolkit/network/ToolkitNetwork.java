@@ -16,8 +16,11 @@ public final class ToolkitNetwork {
      * 6：快速建造请求增加半砖朝向字段。
      * 7：设置里增加“交换行”和预设名称。
      * 8：快速建造请求改为发送第一个点的方块状态（朝向/上下半等由它决定）。
+     * 9：新增剪切复制（新增剪切复制网络包）。
+     * 11：蓝图箱分级、容器内容作为材料、滚动界面。
+     * 12：蓝图建造改为 V 选区 + 蓝图箱收蓝图 + Ctrl+右键虚影预览；移除 Ctrl+C/X/V。
      */
-    public static final String PROTOCOL_VERSION = "8";
+    public static final String PROTOCOL_VERSION = "12";
 
     private ToolkitNetwork() {
     }
@@ -51,6 +54,19 @@ public final class ToolkitNetwork {
         registrar.playToServer(QuickBuildPayload.TYPE, QuickBuildPayload.STREAM_CODEC, QuickBuildPayload::handle);
         registrar.playToServer(CycleBuildPresetPayload.TYPE, CycleBuildPresetPayload.STREAM_CODEC,
                 CycleBuildPresetPayload::handle);
+        // 剪切复制
+        registrar.playToServer(CopyPastePayload.TYPE, CopyPastePayload.STREAM_CODEC, CopyPastePayload::handle);
+        // 蓝图箱：记录蓝图、使用蓝图建造、复制蓝图、界面按钮
+        registrar.playToServer(BlueprintCreatePayload.TYPE, BlueprintCreatePayload.STREAM_CODEC,
+                BlueprintCreatePayload::handle);
+        registrar.playToServer(BlueprintBuildPayload.TYPE, BlueprintBuildPayload.STREAM_CODEC,
+                BlueprintBuildPayload::handle);
+        registrar.playToServer(BlueprintCopyPayload.TYPE, BlueprintCopyPayload.STREAM_CODEC,
+                BlueprintCopyPayload::handle);
+        registrar.playToServer(BlueprintBoxActionPayload.TYPE, BlueprintBoxActionPayload.STREAM_CODEC,
+                BlueprintBoxActionPayload::handle);
+        registrar.playToServer(BlueprintScrollPayload.TYPE, BlueprintScrollPayload.STREAM_CODEC,
+                BlueprintScrollPayload::handle);
         // 自动补充
         registrar.playToServer(RefillHotbarPayload.TYPE, RefillHotbarPayload.STREAM_CODEC, RefillHotbarPayload::handle);
     }

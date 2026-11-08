@@ -2,15 +2,21 @@ package com.prism.aliyastoolkit;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import com.prism.aliyastoolkit.client.ChainMiningClient;
+import com.prism.aliyastoolkit.client.BlueprintBoxItemRenderer;
+import com.prism.aliyastoolkit.client.BlueprintBoxRenderer;
+import com.prism.aliyastoolkit.client.BlueprintBoxScreen;
 import com.prism.aliyastoolkit.client.ClientAutoRefill;
+import com.prism.aliyastoolkit.client.CopyPasteClient;
 import com.prism.aliyastoolkit.client.ExclusiveModes;
 import com.prism.aliyastoolkit.client.QuickBuildClient;
 import com.prism.aliyastoolkit.client.ToolkitScreen;
+import com.prism.aliyastoolkit.blueprint.BlueprintBoxes;
 import com.prism.aliyastoolkit.network.OpenToolkitPayload;
 import com.prism.aliyastoolkit.network.SwapHotbarPayload;
 
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
 import net.minecraft.network.ConnectionProtocol;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
@@ -21,8 +27,11 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
+import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
+import net.neoforged.neoforge.client.extensions.common.RegisterClientExtensionsEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.client.settings.KeyConflictContext;
@@ -37,6 +46,22 @@ import org.lwjgl.glfw.GLFW;
 // You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent
 @EventBusSubscriber(modid = AliyasToolkit.MODID, value = Dist.CLIENT)
 public class AliyasToolkitClient {
+    /**
+     * 物品栏/掉落物也使用蓝图箱自己的 ChestRenderer，保证和世界中方块一致。
+     * 自定义渲染器延迟创建，避免在客户端资源还没初始化时访问 Minecraft。
+     */
+    private static final IClientItemExtensions BLUEPRINT_BOX_ITEM_EXTENSIONS = new IClientItemExtensions() {
+        private BlueprintBoxItemRenderer renderer;
+
+        @Override
+        public BlockEntityWithoutLevelRenderer getCustomRenderer() {
+            if (this.renderer == null) {
+                this.renderer = new BlueprintBoxItemRenderer();
+            }
+            return this.renderer;
+        }
+    };
+
     /** 按键绑定分类（显示在“选项 -> 控制 -> 按键绑定”里的分类名）。 */
     public static final String KEY_CATEGORY = "key.categories." + AliyasToolkit.MODID;
 
@@ -95,10 +120,23 @@ public class AliyasToolkitClient {
             GLFW.GLFW_KEY_C,
             KEY_CATEGORY);
 
+    /**
+     * 剪切复制的快捷键。
+     * <p>
+     * 默认 V。固定为“切换”：按一下开启，再按一下关闭；开启时会关掉其它互斥功能。
+     */
+    public static final KeyMapping COPY_PASTE_KEY = new KeyMapping(
+            "key." + AliyasToolkit.MODID + ".copy_paste",
+            KeyConflictContext.IN_GAME,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_V,
+            KEY_CATEGORY);
+
     public AliyasToolkitClient(IEventBus modEventBus, ModContainer container) {
-        // 互斥模式：连锁破坏、快速建造（以及以后新增的同类功能）同一时间最多开启一个
+        // 互斥模式：连锁破坏、快速建造、剪切复制同一时间最多开启一个
         ExclusiveModes.register(ExclusiveModes.CHAIN_MINING, ChainMiningClient::forceDisable);
         ExclusiveModes.register(ExclusiveModes.QUICK_BUILD, QuickBuildClient::forceDisable);
+        ExclusiveModes.register(ExclusiveModes.COPY_PASTE, CopyPasteClient::forceDisable);
 
         // Allows NeoForge to create a config screen for this mod's configs.
         // The config screen is accessed by going to the Mods screen > clicking on your mod > clicking on config.
@@ -109,6 +147,10 @@ public class AliyasToolkitClient {
         modEventBus.addListener(AliyasToolkitClient::onRegisterKeyMappings);
         // 容器菜单对应的界面也要注册，否则打开配置界面时客户端不知道怎么画
         modEventBus.addListener(AliyasToolkitClient::onRegisterMenuScreens);
+        // 蓝图箱使用原版 ChestRenderer 的箱子模型和翻盖动画
+        modEventBus.addListener(AliyasToolkitClient::onRegisterRenderers);
+        // 物品栏/掉落物使用同一个箱子渲染器
+        modEventBus.addListener(AliyasToolkitClient::onRegisterClientExtensions);
     }
 
     private static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
@@ -116,16 +158,28 @@ public class AliyasToolkitClient {
         event.register(OPEN_TOOLKIT_KEY);
         event.register(CHAIN_MINE_KEY);
         event.register(QUICK_BUILD_KEY);
+        event.register(COPY_PASTE_KEY);
     }
 
     private static void onRegisterMenuScreens(RegisterMenuScreensEvent event) {
         event.register(AliyasToolkit.TOOLKIT_MENU.get(), ToolkitScreen::new);
+        event.register(AliyasToolkit.BLUEPRINT_BOX_MENU.get(), BlueprintBoxScreen::new);
+    }
+
+    private static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {
+        event.registerBlockEntityRenderer(BlueprintBoxes.BLUEPRINT_BOX_BE.get(), BlueprintBoxRenderer::new);
+    }
+
+    private static void onRegisterClientExtensions(RegisterClientExtensionsEvent event) {
+        for (var item : BlueprintBoxes.items()) {
+            event.registerItem(BLUEPRINT_BOX_ITEM_EXTENSIONS, item.get());
+        }
     }
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
         AliyasToolkit.LOGGER.info(
-                "Aliya's Toolkit client setup complete (swap: X, chain mining: Z, quick build: C, toolkit screen: Alt+X)");
+                "Aliya's Toolkit client setup complete (swap: X, chain mining: Z, quick build: C, blueprint build: V, toolkit screen: Alt+X)");
     }
 
     /**

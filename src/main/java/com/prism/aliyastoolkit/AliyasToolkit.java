@@ -3,6 +3,9 @@ package com.prism.aliyastoolkit;
 import org.slf4j.Logger;
 
 import com.mojang.logging.LogUtils;
+import com.prism.aliyastoolkit.blueprint.BlueprintBoxes;
+import com.prism.aliyastoolkit.blueprint.BlueprintCreativeTab;
+import com.prism.aliyastoolkit.menu.BlueprintBoxMenu;
 import com.prism.aliyastoolkit.menu.ToolkitMenu;
 import com.prism.aliyastoolkit.network.ToolkitNetwork;
 
@@ -27,8 +30,9 @@ import net.neoforged.neoforge.registries.NeoForgeRegistries;
  * <li>快捷栏与背包指定行交换（快捷键，默认 X；交换行可在配置界面里选 1-3）</li>
  * <li>快捷栏物品消失后，从背包自动补充白名单物品</li>
  * <li>连锁破坏（快捷键，默认 Z）：按键切换到连锁状态后，用准星指向方块，挖一个带走附近相同的方块</li>
- * <li>“Aliya's Toolkit 配置”界面（快捷键 Alt + X）：左侧 3 个功能按钮（物品切换 / 自动补充 / 连锁破坏），
- * 右侧显示当前功能的设置内容</li>
+ * <li>快速建造（快捷键，默认 C）：右键两个点划定范围，用主手方块建造</li>
+ * <li>剪切复制（快捷键，默认 V）：右键划定区域，剪切或复制后粘贴到其它位置；主手空蓝图箱时可直接记录蓝图</li>
+ * <li>“Aliya's Toolkit 配置”界面（快捷键 Alt + X）：左侧功能按钮，右侧显示当前功能的设置内容</li>
  * </ul>
  * 功能开关在模组配置里（{@link Config}），各项功能的具体参数按玩家保存在 {@link ToolkitSettings}。
  */
@@ -48,6 +52,12 @@ public class AliyasToolkit {
     /** “Aliya's Toolkit 配置”界面的菜单类型。 */
     public static final DeferredHolder<MenuType<?>, MenuType<ToolkitMenu>> TOOLKIT_MENU = MENU_TYPES.register("toolkit",
             () -> IMenuTypeExtension.create((containerId, inventory, data) -> new ToolkitMenu(containerId, inventory)));
+
+    /** 蓝图箱 / 大蓝图箱共用的容器菜单（读取方块位置，客户端据此找到方块实体）。 */
+    public static final DeferredHolder<MenuType<?>, MenuType<BlueprintBoxMenu>> BLUEPRINT_BOX_MENU =
+            MENU_TYPES.register("blueprint_box",
+                    () -> IMenuTypeExtension.create((containerId, inventory, data) ->
+                            new BlueprintBoxMenu(containerId, inventory, data)));
 
     /**
      * 每个玩家自己的物品白名单。
@@ -78,6 +88,9 @@ public class AliyasToolkit {
         // 注册菜单类型与玩家数据附件
         MENU_TYPES.register(modEventBus);
         ATTACHMENT_TYPES.register(modEventBus);
+        // 蓝图箱方块 / 物品 / 方块实体，以及创造模式物品栏
+        BlueprintBoxes.register(modEventBus);
+        BlueprintCreativeTab.register(modEventBus);
 
         // 注册网络包（快捷栏交换、配置界面及设置同步、连锁状态、自动补充）
         modEventBus.addListener(ToolkitNetwork::register);

@@ -69,11 +69,49 @@
 - 一次最多建造 4096 个方块，目标点离玩家最远 40 格；超出范围或不是可替换方块的位置会被跳过。
 - 服务端会重新计算范围并校验距离、方块数量，避免客户端作弊。
 
-### 5. Aliya's Toolkit 配置界面
+### 5. 蓝图建造
+
+- 短按 `V`（默认，可改键）开关蓝图建造；**和连锁破坏、快速建造等“模式类”功能互斥**：开启它会自动关闭其它模式，开启其它模式也会关闭它。旧的 `Ctrl + C` / `Ctrl + X` / `Ctrl + V` 快捷键已移除。
+- **划定区域**：主手不能拿蓝图箱。右键一个方块记下第一个角，再右键另一个方块记下对角，两点围成的长方体就是一块要处理的区域；选好第一个点后会**实时预览**整个范围。可以重复多次，多块区域允许重叠（合并后一起去重处理）。左键取消正在划定的区域，或删除点击位置所在的已选区域。
+- 已确定的选区用**黄色轮廓**，正在跟随准星的动态预览用**亮黄色轮廓**；描边规则与连锁破坏 / 快速建造一致（只画 90° / 270° 转角线，被挡住的部分暗一点）。动态预览时不再额外绘制第一个点的单格粗框。选不到方块时（指向空气、超出触及距离），取视线前方约 2 格的位置，和快速建造一致。
+- **收进蓝图箱**：选区划好后，切换主手为**没有物品的蓝图箱**（可以已经存有蓝图，会被新蓝图覆盖），右键选区内的方块。客户端和服务端都会重新读取结构、校验容量；成功后选区里的方块消失，方块物品和容器内容全部收进箱子，并自动退出蓝图模式。
+- **容量不足**：如果所需格子超过箱子容量，会提示「物品过多，请使用更高级的蓝图箱」，**不会退出蓝图模式**，可以换更大的箱子后再次右键。
+- 一次最多处理 4096 个方块，操作位置离玩家最远 40 格；服务端会重新读取方块、校验距离和物品数量。记录时会保存完整结构：方块状态 + 方块实体数据 + 容器内容及其原槽位；旋转时方块朝向（楼梯、箱子、告示牌、原木等）也会一起旋转。
+
+### 6. 蓝图箱
+
+- 记录流程见上一节：`V` 选区 → 换成**没有物品的蓝图箱** → 右键选区收进箱子。记录会保存完整结构：方块状态 + 方块实体数据 + **容器里的物品及其原槽位**。
+- **虚影预览建造**：手持带蓝图的蓝图箱，按 `Ctrl + 右键` 进入预览。虚影默认在视线前方 **8 格**；如果结构会碰到玩家，会自动推远到「刚好碰不到 + 2 格」。**滚轮**调整远近（向前拉远、向后拉近；预览期间不会切换快捷栏物品），**Tab** 绕 Y 轴顺时针旋转 90°，方块朝向会跟着旋转。箱子、潜影盒、床等 `ENTITYBLOCK_ANIMATED` 方块也会使用真实 BlockState 显示对应的方块模型虚影。虚影会检查所有目标方块：在指示器周围半径 **4 格**的球内寻找最近的、全部可替换且不会碰到玩家的位置；找不到时提示「附近没有能放下蓝图的位置」。
+- **固定 / 建造**：第一次右键固定虚影，此时可以走近查看效果；左键取消固定，虚影重新跟随视角。固定后再次右键确认建造，按方块物品 + 容器内容精确消耗箱子里的材料；材料不足或距离过远不会开始。
+- 等级与容量（都是 9 列）：
+  - 蓝图箱：3×9（27），青金石色，木箱 + 8 纸；
+  - 铜制蓝图箱：5×9（45），铜色，蓝图箱 + 8 铜锭；
+  - 铁制蓝图箱：7×9（63），铁色，铜制 + 8 铁锭；
+  - 金制蓝图箱：9×9（81），金色，铁制 + 8 金锭；
+  - 黑曜石蓝图箱：12×9（108），哭泣的黑曜石色，金制 + 8 黑曜石；
+  - 钻石蓝图箱：15×9（135），钻石色，黑曜石 + 8 钻石；
+  - 下界合金蓝图箱：18×9（162），下界合金色，在**锻造台**用钻石蓝图箱 + 下界合金锭 + 下界合金升级模板升级。
+- 方块直接继承原版 `ChestBlock` / `ChestBlockEntity`，并使用原版 `ChestRenderer`：因此有箱子的形状、朝向、比较器、开盖音效和**翻盖动画**；蓝图箱强制保持单箱，不会和相邻蓝图箱合并成双箱，也不允许把蓝图箱放进另一个蓝图箱。等级使用单独的原版箱子贴图，只把深色包边换成对应材质颜色，不给整个箱子染色，并保留原版黑色箱内壁。
+- 界面最多显示 **5 行 × 9 列**，列与玩家背包列对齐；超过 5 行时右侧有**滚动条**，可用滚轮或拖动，滑块使用创造模式物品栏的样式，并配有原版槽位风格的滑槽。主面板直接使用原版 `generic_54.png` 箱子界面纹理，槽位、玩家背包和标题区域都由原版纹理绘制，右侧扩展区只保留滚动条和按钮，左右面板之间没有黑色竖缝。没有蓝图时所有格子使用**合成器同款禁用槽位覆盖层**；记录蓝图后显示**半透明幽灵占位**和每格需求量；需求数字缩小到槽位右上角内部，不会越出边框。占位物品只接受对应物品，并受每格上限限制。
+- 槽位悬停会显示物品说明：空占位显示占位物品和需求量，已放入物品显示物品本身的主要说明；蓝图箱物品说明不再包含操作方式和“是否记录蓝图”的状态。
+- 虚影只渲染正常放置时可见的面；相邻方块的隐藏面会被剔除，箱子等实体方块会先写深度再半透明绘制，避免看到内部贴图。
+- 物品栏、快捷栏和掉落物都使用与世界中相同的箱子模型和等级贴图，不再使用旧的自定义物品模型。
+- `一键存入` 会把背包里符合占位的物品放进箱子；`一键取出` 把物品放进背包并保留蓝图，背包满时多余物品留在箱内；`清空蓝图` 把物品放回背包并清空蓝图与占位，放不下的物品会掉落在玩家脚下。
+- 与漏斗等自动化：箱子实现容器接口，漏斗可以像普通箱子一样抽取；插入会检查物品和每格上限。比较器按**已填数量 / 总需求数量**输出 0-15 红石强度。
+- 掉落物保护：
+  - 所有蓝图箱在水中向上漂浮；
+  - 铜制及以上的**方块本体**防火 / 防岩浆（不会燃烧，也不会被岩浆破坏），但铜制、铁制、金制、黑曜石、钻石箱的**掉落物**仍可能被火 / 岩浆销毁；
+  - 黑曜石及以上的**掉落物**不会被爆炸销毁；放置在世界里的黑曜石及以上蓝图箱方块也不会被爆炸破坏；
+  - 只有下界合金的掉落物本身防火 / 防岩浆，并会在岩浆中漂浮；掉入虚空会传送到附近最近的可站立位置。
+- 用铁砧改名会保留箱子内容 / 蓝图；破坏箱子会保留物品、蓝图和容器内容（创造模式也会生成掉落物）。
+- 记录 / 建造时，容器内容物也作为材料成本：例如蓝图里有一个装着 3 个钻石的箱子，需要额外准备 3 个钻石；建造完成后会放回原容器的原槽位。
+- 本模组物品有独立的创造模式分类「Aliya's Toolkit 物品」。
+
+### 7. Aliya's Toolkit 配置界面
 
 按 `Alt + X`（可改键）打开：
 
-- **左侧**：4 个功能按钮（`物品切换` / `自动补充` / `连锁破坏` / `快速建造`）。点哪个，右边就显示哪个功能的内容，默认显示第一个（物品切换）；当前功能的按钮会高亮。
+- **左侧**：5 个功能按钮（`物品切换` / `自动补充` / `连锁破坏` / `快速建造` / `蓝图建造`）。点哪个，右边就显示哪个功能的内容，默认显示第一个（物品切换）；当前功能的按钮会高亮。
 - 左右两侧由一条接近贯穿整个界面的竖线隔开（底部留一点空白）：左边只有功能按钮，右边只有功能内容。
 - **物品切换**：功能说明文字 + `交换行` 按钮（和快捷栏交换的背包行，1-3，默认 3；左键 +1、右键 -1）。快捷键可在「选项 → 控制 → 按键绑定」里修改。
 - **自动补充**：`完全一致` 开关 + 3×3 物品白名单 + 玩家的背包 / 快捷栏（只在当前页面显示）。从背包拿起物品 → **左键**点白名单格：把该物品记入这一格（手上的物品不消耗，可放回原处）；**右键**点白名单格：清空并自动保存。
@@ -85,6 +123,7 @@
   - 预设选择（`<` / `>` / 名称）、`新建`、`删除`（至少保留 1 个，最多 16 个）；
   - 切换行下面单独一行是**预设名称**（同样可直接编辑，默认「预设1」「预设2」……）；
   - `操作` / `维度` / `形状` / `填充` 四个整行按钮：**左键下一个、右键上一个，循环**；鼠标悬停会显示当前可选的全部内容（当前项用 `[]` 标出）；只有一个可选项时按钮变灰。
+- **蓝图建造**：功能说明 + 选区 / 收进蓝图箱 / 虚影预览 / 旋转 / 固定 / 建造的操作提示（显示的按键会跟随按键绑定变化）。
 - 右上角有关闭按钮；白名单和设置（含所有预设）都**绑定在玩家身上**：多人游戏每人一份，随玩家数据保存，死亡重生后保留。
 
 ## 屏幕提示
@@ -92,7 +131,7 @@
 - 按住 `Z` 滚动滚轮切换预设时，用**原版动作栏文字**显示预设名称 + 编号 + 形状 / 层数 / 锁定方向，随后自动淡出。
 - 按住 `C` 滚动滚轮切换快速建造预设时，动作栏显示预设名称 + 编号 + 操作 / 维度 / 形状 / 填充。
 - 快速建造选好第一个点后，动作栏持续显示「所需方块 / 背包里数量」，右键第二次即可开建。
-- 连锁破坏的规划范围用白色描边、指向方块用更粗的白色框；快速建造的规划范围用绿色描边。
+- 连锁破坏的规划范围用白色描边、指向方块用更粗的白色框；快速建造的规划范围用绿色描边；蓝图建造的选区用黄色描边，虚影预览用蓝色描边（材料不足或位置不合法时变红）；固定后虚影保持在世界中，方便走近查看。
 - 切换快捷栏物品时直接使用**原版自带的选中物品名称**提示，本模组不再额外画提示。
 
 
@@ -105,6 +144,13 @@
 | 切换大量方块预设 | 按住 `Z` 滚动滚轮（需先开启连锁破坏；下滚下一个，上滚上一个，不循环；不会切换开关） | 同上 |
 | 快速建造开关 | 短按 `C`（松开时生效） | 同上 |
 | 切换快速建造预设 | 按住 `C` 滚动滚轮（需先开启快速建造；不循环；不会切换开关） | 同上 |
+| 蓝图建造开关 / 选区模式 | 短按 `V` | 同上 |
+| 蓝图建造：把选区收进蓝图箱 | 换成无物品的蓝图箱后右键选区内方块 | 同上 |
+| 蓝图建造：进入虚影预览 | 手持带蓝图的蓝图箱，`Ctrl + 右键` | 同上 |
+| 蓝图建造：调整虚影距离 | 滚轮（预览期间不会切换物品） | 同上 |
+| 蓝图建造：旋转虚影 | `Tab`（固定之前） | 同上 |
+| 蓝图建造：固定 / 取消固定 | 右键 / 左键（虚影预览中） | 同上 |
+| 蓝图建造：确认建造 | 固定后再次右键 | 同上 |
 | 打开 Aliya's Toolkit 配置界面 | `Alt + X` | 同上 |
 
 所有按键只在游戏内生效（打开界面时不会触发）。
@@ -119,6 +165,7 @@
 | `enableAutoRefill` | `true` | 启用自动补充 |
 | `enableChainMining` | `true` | 启用连锁破坏 |
 | `enableQuickBuild` | `true` | 启用快速建造 |
+| `enableCopyPaste` | `true` | 启用蓝图建造 |
 
 玩家设置（游戏内界面）：
 
@@ -242,11 +289,49 @@ export JAVA_HOME=/path/to/jdk-21
 - The server re-computes the region and validates distance and block count, so the client cannot cheat.
 
 
-### 5. Aliya's Toolkit settings screen
+### 5. Blueprint build
+
+- Tap `V` (default, rebindable) to toggle blueprint build. It is **mutually exclusive with the other mode features** (chain mining, quick build): enabling one disables the others. The old `Ctrl + C` / `Ctrl + X` / `Ctrl + V` shortcuts have been removed.
+- **Mark regions**: your main hand must not hold a blueprint box. Right click a block to set the first corner, then right click another block to set the opposite corner; the cuboid between them becomes one region, and the whole region is **previewed live** after the first point. Repeat as often as you like — regions may overlap (they are merged and de-duplicated). Left click cancels the pending region or removes the marked region under the crosshair.
+- Marked regions are outlined in **yellow**; the live region that follows the crosshair uses a **brighter yellow**. Both use the same edge rules as chain mining / quick build (only 90° / 270° corner edges, hidden parts are darker). The separate thick box on the first point is no longer drawn during the live preview. When no block can be picked (pointing at air / out of reach), the position about 2 blocks ahead of the view is used, just like quick build.
+- **Store into a blueprint box**: after marking, switch your main hand to a **blueprint box with no items** (it may already contain a blueprint; the new one overwrites it), then right click a block inside the selection. Both client and server re-read the structure and validate capacity; on success the selected blocks disappear, all block items and container contents are stored in the box, and blueprint mode exits.
+- **Not enough space**: if the required slots exceed the box capacity, you get "Too many items; use a higher tier blueprint box" and **blueprint mode stays active**, so you can switch to a larger box and right click again.
+- Up to 4096 blocks per operation and the targets must be within 40 blocks of the player; the server re-reads the blocks and validates distance and item counts. The recording stores block states, block entity data, and container contents with their original slots; when rotating, block orientations (stairs, chests, signs, logs, ...) are rotated as well.
+
+### 6. Blueprint boxes
+
+- Recording flow: press `V` and mark the region → switch to a **blueprint box with no items** → right click the selection to store it. The recording stores the complete structure: block states, block entity data, and **container contents together with their original slots**.
+- **Ghost preview building**: hold a blueprint box with a blueprint and press `Ctrl + right click` to enter the preview. The ghost starts **8 blocks** ahead of your view; if the structure would touch you, it automatically moves to "just far enough + 2 blocks". **Scroll** to change the distance (scroll forward = farther, backward = closer; the wheel does not switch items during the preview), and press **Tab** to rotate 90° clockwise around the Y axis; block orientations rotate with it. `ENTITYBLOCK_ANIMATED` blocks such as chests, shulker boxes and beds render their block models with the real BlockState. The ghost checks every target block: it searches a sphere of radius **4** around the indicator for the nearest position where all blocks are replaceable and the structure does not touch the player, and reports that no position fits if none is found.
+- **Pin / build**: the first right click pins the ghost so you can walk around and inspect it; left click unpins it and it follows your view again. While pinned, right click again to confirm the build. Block items and container contents are consumed exactly from the box; not enough materials or too much distance cancels the build.
+- Tiers and capacities (all 9 columns):
+  - Blueprint Box: 3×9 (27), lapis trim, chest + 8 paper;
+  - Copper Blueprint Box: 5×9 (45), copper trim, blueprint box + 8 copper ingots;
+  - Iron Blueprint Box: 7×9 (63), iron trim, copper box + 8 iron ingots;
+  - Gold Blueprint Box: 9×9 (81), gold trim, iron box + 8 gold ingots;
+  - Obsidian Blueprint Box: 12×9 (108), crying obsidian trim, gold box + 8 obsidian;
+  - Diamond Blueprint Box: 15×9 (135), diamond trim, obsidian box + 8 diamonds;
+  - Netherite Blueprint Box: 18×9 (162), netherite trim, smithing table: diamond box + netherite ingot + netherite upgrade template.
+- The block directly extends vanilla `ChestBlock` / `ChestBlockEntity` and uses vanilla `ChestRenderer`: it has the chest shape, facing, comparator, open/close sounds and the **vanilla lid animation**; blueprint boxes always stay single, never merge into double chests, and cannot be placed inside another blueprint box. Each tier uses a separate vanilla chest texture whose dark frame is recoloured to the matching material, instead of tinting the whole chest, while the vanilla black interior is preserved.
+- The screen shows at most **5 rows × 9 columns**, aligned with the player inventory columns; if the box has more than 5 rows, a **scrollbar** on the right can be used with the mouse wheel or dragging, using the creative-inventory thumb with a vanilla-slot-style track. The main panel uses vanilla `generic_54.png` directly: the slots, player inventory and title area are all drawn by the vanilla texture; only the right extension contains the scrollbar and buttons, with no black vertical seam between the two panels. Without a blueprint every slot uses the **crafter disabled-slot overlay**; after recording, **semi-transparent ghost placeholders** and per-slot required counts are shown. The count is scaled down inside the top-right corner of the slot so it never leaves the border. Placeholder slots only accept the matching item and respect the per-slot limit.
+- Hovering a slot shows the item description: an empty placeholder shows the placeholder item and required count, while a stored item shows its main tooltip. Blueprint box item tooltips no longer include operation instructions or whether a blueprint has been recorded.
+- Ghosts only draw faces that would be visible in a normal placement; hidden faces between adjacent blocks are culled, and entity-rendered blocks such as chests use a depth pre-pass before translucent drawing so their interior textures do not show through.
+- Items in the inventory, hotbar and as dropped entities use the same chest model and tier texture as the placed block, instead of the old custom item model.
+- `Store All` moves matching items from the inventory into the box; `Quick Take` moves items to the inventory and keeps the blueprint, leaving overflow in the box; `Clear Blueprint` returns items and clears the blueprint and placeholders, dropping overflow at the player's feet.
+- Hoppers and automation work like a normal chest: the box implements the container interface, so hoppers can extract; insertion checks the item and per-slot limit. A comparator outputs 0-15 redstone strength based on **filled count / total required count**.
+- Dropped-item protection:
+  - all blueprint boxes float upward in water;
+  - for copper and above, the **placed block** is fire / lava proof (it does not burn and lava does not destroy it), but the **dropped item** of copper, iron, gold, obsidian and diamond boxes can still be destroyed by fire / lava;
+  - the **dropped item** of obsidian and above is not destroyed by explosions; a placed obsidian-or-higher blueprint box block is also not destroyed by explosions;
+  - only the netherite dropped item is fire / lava proof and floats in lava; if it falls into the void, it teleports to the nearest safe standing position.
+- Renaming with an anvil keeps the contents / blueprint; breaking the box keeps the items, blueprint, and container contents (creative mode also drops the item).
+- Container contents are extra material cost when recording / building: e.g., a chest holding 3 diamonds in the blueprint needs 3 extra diamonds; after building, they are placed back into the original container slots.
+- This mod's items have their own creative tab, "Aliya's Toolkit Items".
+
+### 7. Aliya's Toolkit settings screen
 
 Press `Alt + X` (rebindable) to open it:
 
-- **Left side**: 4 feature buttons (`Item Switching` / `Automatic Refill` / `Chain Mining` / `Quick Build`). Clicking one shows that feature's settings on the right; the first one (Item Switching) is shown by default and the active button is highlighted.
+- **Left side**: 5 feature buttons (`Item Switching` / `Automatic Refill` / `Chain Mining` / `Quick Build` / `Blueprint Build`). Clicking one shows that feature's settings on the right; the first one (Item Switching) is shown by default and the active button is highlighted.
 - The left and right halves are separated by a vertical divider that runs down almost the whole screen (with a small gap at the bottom): the left side only has the feature buttons, the right side only the feature content.
 - **Item Switching**: a short description plus a `Swap Row` button (which inventory row is swapped with the hotbar, 1-3, default 3; left click +1, right click -1). The key can be changed in Options → Controls → Key Binds.
 - **Automatic Refill**: the `Exact Match` toggle, the 3×3 **item whitelist** and the player's inventory / hotbar (only shown on this page). Pick up an item from the inventory, **left click** a whitelist cell to store that item there (the item on the cursor is not consumed — put it back afterwards). **Right click** a cell to clear it; everything is saved automatically.
@@ -258,6 +343,7 @@ Press `Alt + X` (rebindable) to open it:
   - A **preset selector** (`<` / `>` / name), `New` and `Del` (at least one preset always remains, up to 16);
   - Below the selector there is a single **preset name** row (editable, no label; defaults to 预设1, 预设2, ...);
   - `Operation` / `Dimension` / `Shape` / `Fill`, each on its own full-width row: **left click = next, right click = previous, wrapping**; hovering shows all available choices with the current one in `[]`; greyed out when there is only one choice.
+- **Blueprint Build**: a short description plus hints for marking regions / storing into a box / ghost preview / rotate / pin / build (the displayed keys follow your key bindings).
 - The close button is in the top-right corner. The whitelist and settings (including all presets) are attached to the **player**, so in multiplayer every player has their own values, they are stored with the player data and they survive death / respawn.
 
 ## On-screen hints
@@ -265,7 +351,7 @@ Press `Alt + X` (rebindable) to open it:
 - Switching presets (hold `Z` and scroll) shows the preset name, number, shape / layers / lock direction in the **action bar** (vanilla text overlay), which fades out automatically.
 - Switching quick-build presets (hold `C` and scroll) shows the preset name, number, operation / dimension / shape / fill in the action bar.
 - After the first quick-build point is selected, the action bar keeps showing the required block count and how many you have; the second right click starts the build.
-- Chain mining outlines the planned region in white and the targeted block with a thicker white frame; quick build outlines the planned region in green.
+- Chain mining outlines the planned region in white and the targeted block with a thicker white frame; quick build outlines the planned region in green; blueprint build outlines the marked regions in yellow and the ghost preview in blue (red when materials are insufficient or the position is invalid); a pinned ghost stays in the world so you can walk around and inspect it.
 - Switching the selected hotbar slot uses vanilla's built-in **selected item name** display; the mod does not add a second prompt.
 
 
@@ -278,6 +364,13 @@ Press `Alt + X` (rebindable) to open it:
 | Switch massive-block preset | Hold `Z` and scroll (chain mining must be enabled; down = next, up = previous, no wrapping; does not toggle the mode) | same place |
 | Quick build toggle | Tap `C` (applied on release) | same place |
 | Switch quick-build preset | Hold `C` and scroll (quick build must be enabled; no wrapping; does not toggle the mode) | same place |
+| Blueprint build toggle / selection mode | Tap `V` | same place |
+| Blueprint build: store the selection | Switch to a blueprint box with no items, then right click inside the selection | same place |
+| Blueprint build: ghost preview | Hold a box with a blueprint, `Ctrl + right click` | same place |
+| Blueprint build: change ghost distance | Scroll (does not switch items during the preview) | same place |
+| Blueprint build: rotate the ghost | `Tab` (before pinning) | same place |
+| Blueprint build: pin / unpin | right click / left click (during ghost preview) | same place |
+| Blueprint build: confirm | right click again while pinned | same place |
 | Open the Aliya's Toolkit settings screen | `Alt + X` | same place |
 
 All keys only work in-game (not while a screen is open).
@@ -292,6 +385,7 @@ Open **Mods → Aliya's Toolkit → Config**, or edit `config/aliyastoolkit-comm
 | `enableAutoRefill` | `true` | Enable automatic refill. |
 | `enableChainMining` | `true` | Enable chain mining. |
 | `enableQuickBuild` | `true` | Enable quick build. |
+| `enableCopyPaste` | `true` | Enable blueprint build. |
 
 Per-player settings (in the in-game screen):
 

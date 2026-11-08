@@ -38,7 +38,7 @@ import org.lwjgl.glfw.GLFW;
  * <p>
  * 布局：标题栏（右上角是关闭按钮）；
  * <ul>
- * <li>左侧：4 个功能按钮（物品切换 / 自动补充 / 连锁破坏 / 快速建造），点哪个右边就显示哪个功能的内容</li>
+ * <li>左侧：5 个功能按钮（物品切换 / 自动补充 / 连锁破坏 / 快速建造 / 蓝图建造），点哪个右边就显示哪个功能的内容</li>
  * <li>右侧：当前功能的内容区，默认显示第一个功能（物品切换）</li>
  * <li>玩家背包与快捷栏只在“自动补充”页显示（用来设置白名单）</li>
  * </ul>
@@ -49,6 +49,7 @@ import org.lwjgl.glfw.GLFW;
  * <li>连锁破坏：连锁数量（左键 +1、右键 -1），以及只对石头/泥土这类大量方块生效的
  * 预设（预设名称 + 横截面 + 层数 + 锁定方向）</li>
  * <li>快速建造：预设名称 + 操作 / 维度 / 形状 / 填充</li>
+ * <li>蓝图建造：功能说明 + 选区 / 收进蓝图箱 / 虚影预览 / 旋转 / 固定 / 建造的操作提示</li>
  * </ul>
  * 白名单格子和玩家背包/快捷栏只属于“自动补充”页：切到别的功能页时它们不绘制、也不响应鼠标。
  * 白名单格子：左键设置为当前拿着的物品（不消耗），右键清空。
@@ -119,6 +120,10 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private static final int BUILD_FILL_Y = 128;
     private static final int BUILD_HINT_Y = 152;
 
+    /** 蓝图建造页：说明文字和操作提示的纵坐标。 */
+    private static final int COPY_PASTE_DESC_Y = 34;
+    private static final int COPY_PASTE_HINT_Y = 66;
+
     /** 当前界面里的设置（和客户端缓存保持同步）。 */
     private ToolkitSettings settings = ToolkitSettingsCache.get();
 
@@ -130,6 +135,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private final List<AbstractWidget> autoRefillWidgets = new ArrayList<>();
     private final List<AbstractWidget> chainMiningWidgets = new ArrayList<>();
     private final List<AbstractWidget> quickBuildWidgets = new ArrayList<>();
+    private final List<AbstractWidget> copyPasteWidgets = new ArrayList<>();
 
     private Button swapRowButton;
     /** 预设名称文字框（连锁破坏 / 快速建造各一个；不画标题，直接编辑）。 */
@@ -179,6 +185,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         this.autoRefillWidgets.clear();
         this.chainMiningWidgets.clear();
         this.quickBuildWidgets.clear();
+        this.copyPasteWidgets.clear();
 
         int x = this.leftPos;
         int y = this.topPos;
@@ -189,7 +196,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.close")))
                 .build());
 
-        // 左侧：4 个功能按钮，点击后右边显示对应功能的内容
+        // 左侧：功能按钮，点击后右边显示对应功能的内容
         Feature[] features = Feature.values();
         for (int i = 0; i < features.length; i++) {
             Feature feature = features[i];
@@ -383,6 +390,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         setGroupVisible(this.autoRefillWidgets, this.activeFeature == Feature.AUTO_REFILL);
         setGroupVisible(this.chainMiningWidgets, this.activeFeature == Feature.CHAIN_MINING);
         setGroupVisible(this.quickBuildWidgets, this.activeFeature == Feature.QUICK_BUILD);
+        setGroupVisible(this.copyPasteWidgets, this.activeFeature == Feature.COPY_PASTE);
 
         boolean autoRefill = this.activeFeature == Feature.AUTO_REFILL;
         this.menu.setWhitelistVisible(autoRefill);
@@ -440,6 +448,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
             case AUTO_REFILL -> this.renderAutoRefillLabels(guiGraphics);
             case CHAIN_MINING -> this.renderChainMiningLabels(guiGraphics);
             case QUICK_BUILD -> this.renderQuickBuildLabels(guiGraphics);
+            case COPY_PASTE -> this.renderCopyPasteLabels(guiGraphics);
         }
 
         // 下方：玩家背包（只在“自动补充”页显示，用来往白名单里放物品）
@@ -488,6 +497,20 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         this.drawContentTitle(guiGraphics);
         this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.build.hint",
                 AliyasToolkitClient.QUICK_BUILD_KEY.getTranslatedKeyMessage()), SETTINGS_X, BUILD_HINT_Y, HINT_COLOR);
+    }
+
+    /** 蓝图建造页的文字：功能说明 + 选区 / 装箱 / 预览建造的用法。 */
+    private void renderCopyPasteLabels(GuiGraphics guiGraphics) {
+        this.drawContentTitle(guiGraphics);
+        int y = this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.copy_paste.description"),
+                SETTINGS_X, COPY_PASTE_DESC_Y, TEXT_COLOR);
+        y = Math.max(y + 4, COPY_PASTE_HINT_Y);
+        y = this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.copy_paste.hint.select",
+                AliyasToolkitClient.COPY_PASTE_KEY.getTranslatedKeyMessage()), SETTINGS_X, y, HINT_COLOR);
+        y = this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.copy_paste.hint.place"),
+                SETTINGS_X, y, HINT_COLOR);
+        this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.copy_paste.hint.finish"),
+                SETTINGS_X, y, HINT_COLOR);
     }
 
     private void drawContentTitle(GuiGraphics guiGraphics) {
@@ -889,7 +912,8 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         HOTBAR_SWAP("gui.aliyastoolkit.tab.hotbar_swap"),
         AUTO_REFILL("gui.aliyastoolkit.tab.auto_refill"),
         CHAIN_MINING("gui.aliyastoolkit.tab.chain_mining"),
-        QUICK_BUILD("gui.aliyastoolkit.tab.quick_build");
+        QUICK_BUILD("gui.aliyastoolkit.tab.quick_build"),
+        COPY_PASTE("gui.aliyastoolkit.tab.copy_paste");
 
         private final String translationKey;
 

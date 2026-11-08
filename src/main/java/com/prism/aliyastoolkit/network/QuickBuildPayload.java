@@ -7,6 +7,7 @@ import com.prism.aliyastoolkit.AliyasToolkit;
 import com.prism.aliyastoolkit.BuildPreset;
 import com.prism.aliyastoolkit.Config;
 import com.prism.aliyastoolkit.InventorySync;
+import com.prism.aliyastoolkit.ItemConsumption;
 import com.prism.aliyastoolkit.QuickBuild;
 
 import net.minecraft.core.BlockPos;
@@ -20,7 +21,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -116,13 +116,13 @@ public record QuickBuildPayload(BlockPos first, BlockPos second, BuildPreset pre
             // 创造模式不消耗方块，也不检查数量
             if (!player.isCreative()) {
                 Item item = held.getItem();
-                int available = countItem(player.getInventory(), item);
+                int available = ItemConsumption.count(player.getInventory(), item);
                 if (available < placeable.size()) {
                     player.displayClientMessage(Component.translatable("message.aliyastoolkit.build_not_enough",
                             placeable.size(), available), true);
                     return;
                 }
-                consumeItem(player.getInventory(), item, placeable.size());
+                ItemConsumption.consume(player.getInventory(), item, placeable.size());
             }
             for (BlockPos pos : placeable) {
                 level.setBlock(pos, state, Block.UPDATE_ALL);
@@ -155,37 +155,6 @@ public record QuickBuildPayload(BlockPos first, BlockPos second, BuildPreset pre
             player.displayClientMessage(
                     Component.translatable("message.aliyastoolkit.build_done", placeable.size()), true);
         });
-    }
-
-    /** 统计物品栏（含快捷栏）里某种物品的数量。 */
-    private static int countItem(Inventory inventory, Item item) {
-        int count = 0;
-        for (int i = 0; i < inventory.getContainerSize(); i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (!stack.isEmpty() && stack.is(item)) {
-                count += stack.getCount();
-            }
-        }
-        return count;
-    }
-
-    /** 优先消耗背包（槽位 9-35），不够再消耗快捷栏（0-8）。 */
-    private static void consumeItem(Inventory inventory, Item item, int amount) {
-        int remaining = amount;
-        for (int pass = 0; pass < 2 && remaining > 0; pass++) {
-            int start = pass == 0 ? 9 : 0;
-            int end = pass == 0 ? 36 : 9;
-            for (int i = start; i < end && remaining > 0; i++) {
-                ItemStack stack = inventory.getItem(i);
-                if (stack.isEmpty() || !stack.is(item)) {
-                    continue;
-                }
-                int taken = Math.min(remaining, stack.getCount());
-                stack.shrink(taken);
-                remaining -= taken;
-            }
-        }
-        inventory.setChanged();
     }
 }
 

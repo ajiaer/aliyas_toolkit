@@ -6,7 +6,7 @@ import java.util.Map;
 /**
  * 客户端“互斥模式”管理器。
  * <p>
- * 连锁破坏、快速建造以及以后新增的同类功能都注册到这里：同一时间最多只有一个处于开启状态，
+ * 连锁破坏、快速建造、蓝图建造以及以后新增的同类功能都注册到这里：同一时间最多只有一个处于开启状态，
  * 开启某个模式会自动关闭其它模式。快捷栏交换、自动补充不注册，因此不受影响。
  * <p>
  * 新功能接入方式：在 {@code AliyasToolkitClient} 构造里调用
@@ -14,6 +14,8 @@ import java.util.Map;
  * 关闭时调用 {@link #deactivate(String)}。
  */
 public final class ExclusiveModes {
+    /** 复制模式的模式 id。 */
+    public static final String COPY_PASTE = "copy_paste";
     /** 连锁破坏的模式 id。 */
     public static final String CHAIN_MINING = "chain_mining";
     /** 快速建造的模式 id。 */

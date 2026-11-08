@@ -39,6 +39,14 @@ public class Config {
                     "Quick-build presets are configured per player in the in-game \"Aliya's Toolkit\" screen.")
             .define("enableQuickBuild", true);
 
+    /** 剪切复制的总开关。 */
+    public static final ModConfigSpec.BooleanValue ENABLE_COPY_PASTE = BUILDER
+            .comment(
+                    "Enable blueprint build.",
+                    "When enabled, pressing the blueprint-build key (default V) toggles the feature.",
+                    "Use blueprint boxes to record structures and build them elsewhere; crafting/copy-paste also works without a box.")
+            .define("enableCopyPaste", true);
+
     static final ModConfigSpec SPEC = BUILDER.build();
 }
 
