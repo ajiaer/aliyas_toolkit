@@ -1,0 +1,10 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": ["MMM", "MBM", "MMM"],
+  "key": {
+    "M": { "item": "minecraft:iron_ingot" },
+    "B": { "item": "aliyastoolkit:copper_blueprint_box" }
+  },
+  "result": { "id": "aliyastoolkit:iron_blueprint_box", "count": 1 }
+}

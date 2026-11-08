@@ -12,7 +12,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.util.StringRepresentable;
 
 /**
- * 一个“快速建造”预设：操作方式 + 维度 + 形状 + 填充方式。
+ * 一个“快速建造”预设：操作方式 + 维度 + 形状 + 填充方式 + 名称。
  * <p>
  * 各选项之间有约束（见紧凑构造器）：
  * <ul>
@@ -20,9 +20,10 @@ import net.minecraft.util.StringRepresentable;
  * <li>二维：形状是方形/圆形，填充只能是实心/空心；</li>
  * <li>三维：形状是立方（方形）/球（圆形）；球只能实心/空心，立方还可以是框架。</li>
  * </ul>
+ * {@code name} 是预设名称（默认“预设1”“预设2”……，可在配置界面里改）。
  * 本类是不可变对象，修改时用 {@code withXxx(...)} 生成新实例。
  */
-public record BuildPreset(Operation operation, DimensionKind dimension, ShapeKind shape, Fill fill) {
+public record BuildPreset(Operation operation, DimensionKind dimension, ShapeKind shape, Fill fill, String name) {
     /** 操作方式。 */
     public enum Operation implements StringRepresentable {
         /** 点到点：两个点分别是范围的两个角。 */
@@ -176,7 +177,7 @@ public record BuildPreset(Operation operation, DimensionKind dimension, ShapeKin
 
     /** 新预设的默认值：点到点、二维、方形、实心。 */
     public static final BuildPreset DEFAULT = new BuildPreset(Operation.POINT_TO_POINT, DimensionKind.TWO,
-            ShapeKind.SQUARE, Fill.SOLID);
+            ShapeKind.SQUARE, Fill.SOLID, PresetNames.DEFAULT_PREFIX + "1");
 
     public static final Codec<BuildPreset> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                     Operation.CODEC.optionalFieldOf("operation", DEFAULT.operation())
@@ -184,15 +185,21 @@ public record BuildPreset(Operation operation, DimensionKind dimension, ShapeKin
                     DimensionKind.CODEC.optionalFieldOf("dimension", DEFAULT.dimension())
                             .forGetter(BuildPreset::dimension),
                     ShapeKind.CODEC.optionalFieldOf("shape", DEFAULT.shape()).forGetter(BuildPreset::shape),
-                    Fill.CODEC.optionalFieldOf("fill", DEFAULT.fill()).forGetter(BuildPreset::fill))
+                    Fill.CODEC.optionalFieldOf("fill", DEFAULT.fill()).forGetter(BuildPreset::fill),
+                    Codec.STRING.optionalFieldOf("name", "").forGetter(BuildPreset::name))
             .apply(instance, BuildPreset::new));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, BuildPreset> STREAM_CODEC = StreamCodec.composite(
-            Operation.STREAM_CODEC, BuildPreset::operation,
-            DimensionKind.STREAM_CODEC, BuildPreset::dimension,
-            ShapeKind.STREAM_CODEC, BuildPreset::shape,
-            Fill.STREAM_CODEC, BuildPreset::fill,
-            BuildPreset::new);
+    public static final StreamCodec<RegistryFriendlyByteBuf, BuildPreset> STREAM_CODEC = StreamCodec.of(
+            (buffer, value) -> {
+                Operation.STREAM_CODEC.encode(buffer, value.operation());
+                DimensionKind.STREAM_CODEC.encode(buffer, value.dimension());
+                ShapeKind.STREAM_CODEC.encode(buffer, value.shape());
+                Fill.STREAM_CODEC.encode(buffer, value.fill());
+                buffer.writeUtf(value.name(), ToolkitSettings.MAX_PRESET_NAME_LENGTH);
+            },
+            buffer -> new BuildPreset(Operation.STREAM_CODEC.decode(buffer), DimensionKind.STREAM_CODEC.decode(buffer),
+                    ShapeKind.STREAM_CODEC.decode(buffer), Fill.STREAM_CODEC.decode(buffer),
+                    buffer.readUtf(ToolkitSettings.MAX_PRESET_NAME_LENGTH)));
 
     public BuildPreset {
         if (operation == null) {
@@ -223,6 +230,8 @@ public record BuildPreset(Operation operation, DimensionKind dimension, ShapeKin
                 fill = Fill.SOLID;
             }
         }
+
+        name = PresetNames.sanitize(name);
     }
 
     public static List<Operation> operations() {
@@ -265,19 +274,24 @@ public record BuildPreset(Operation operation, DimensionKind dimension, ShapeKin
     }
 
     public BuildPreset withOperation(Operation value) {
-        return new BuildPreset(value, this.dimension, this.shape, this.fill);
+        return new BuildPreset(value, this.dimension, this.shape, this.fill, this.name);
     }
 
     public BuildPreset withDimension(DimensionKind value) {
-        return new BuildPreset(this.operation, value, this.shape, this.fill);
+        return new BuildPreset(this.operation, value, this.shape, this.fill, this.name);
     }
 
     public BuildPreset withShape(ShapeKind value) {
-        return new BuildPreset(this.operation, this.dimension, value, this.fill);
+        return new BuildPreset(this.operation, this.dimension, value, this.fill, this.name);
     }
 
     public BuildPreset withFill(Fill value) {
-        return new BuildPreset(this.operation, this.dimension, this.shape, value);
+        return new BuildPreset(this.operation, this.dimension, this.shape, value, this.name);
+    }
+
+    /** 修改预设名称（界面里“预设名称”那一行）。 */
+    public BuildPreset withName(String value) {
+        return new BuildPreset(this.operation, this.dimension, this.shape, this.fill, value);
     }
 }
 

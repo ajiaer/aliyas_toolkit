@@ -1,0 +1,12 @@
+{
+    "replace":  false,
+    "values":  [
+                   "aliyastoolkit:blueprint_box",
+                   "aliyastoolkit:copper_blueprint_box",
+                   "aliyastoolkit:iron_blueprint_box",
+                   "aliyastoolkit:gold_blueprint_box",
+                   "aliyastoolkit:obsidian_blueprint_box",
+                   "aliyastoolkit:diamond_blueprint_box",
+                   "aliyastoolkit:netherite_blueprint_box"
+               ]
+}

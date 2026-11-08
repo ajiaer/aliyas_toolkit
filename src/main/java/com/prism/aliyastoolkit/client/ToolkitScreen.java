@@ -18,6 +18,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
@@ -30,25 +31,30 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 
+import org.lwjgl.glfw.GLFW;
+
 /**
  * “Aliya's Toolkit 配置”界面。
  * <p>
  * 布局：标题栏（右上角是关闭按钮）；
  * <ul>
- * <li>左侧：3 个功能按钮（物品切换 / 自动补充 / 连锁破坏），点哪个右边就显示哪个功能的内容</li>
+ * <li>左侧：5 个功能按钮（物品切换 / 自动补充 / 连锁破坏 / 快速建造 / 蓝图建造），点哪个右边就显示哪个功能的内容</li>
  * <li>右侧：当前功能的内容区，默认显示第一个功能（物品切换）</li>
  * <li>玩家背包与快捷栏只在“自动补充”页显示（用来设置白名单）</li>
  * </ul>
  * 各功能页的内容：
  * <ul>
- * <li>物品切换：功能说明文字</li>
+ * <li>物品切换：功能说明文字 + “交换行”（与快捷栏交换的背包行，1-3）</li>
  * <li>自动补充：补充物品是否需要完全一致 + 3x3 物品白名单</li>
  * <li>连锁破坏：连锁数量（左键 +1、右键 -1），以及只对石头/泥土这类大量方块生效的
- * 预设（横截面 + 层数 + 锁定方向）</li>
+ * 预设（预设名称 + 横截面 + 层数 + 锁定方向）</li>
+ * <li>快速建造：预设名称 + 操作 / 维度 / 形状 / 填充</li>
+ * <li>蓝图建造：功能说明 + 选区 / 收进蓝图箱 / 虚影预览 / 旋转 / 固定 / 建造的操作提示</li>
  * </ul>
  * 白名单格子和玩家背包/快捷栏只属于“自动补充”页：切到别的功能页时它们不绘制、也不响应鼠标。
  * 白名单格子：左键设置为当前拿着的物品（不消耗），右键清空。
  * 带加号/减号的按钮：左键 +1，右键 -1。
+ * 预设名称那一行是可编辑的文字框（不画标题），默认“预设1”“预设2”……。
  */
 public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private static final int PANEL_COLOR = 0xFFC6C6C6;
@@ -81,15 +87,18 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private static final int WHITELIST_HEADING_Y = 50;
     private static final int WHITELIST_HINT_Y = 120;
 
-    /** 物品切换页：说明文字的纵坐标。 */
+    /** 物品切换页：说明文字的纵坐标，以及“交换行”按钮。 */
     private static final int HOTBAR_DESC_Y = 34;
+    private static final int HOTBAR_SWAP_ROW_Y = 84;
 
     /** 连锁破坏页：各行的纵坐标。 */
     private static final int CHAIN_LIMIT_Y = 30;
     private static final int CHAIN_MASSIVE_LABEL_Y = 58;
     private static final int CHAIN_PRESET_Y = 72;
+    /** 预设名称（可以直接编辑的文字框，不写标题）。 */
+    private static final int CHAIN_PRESET_NAME_Y = 88;
     /** 大量方块：上 / 左·层数·右 / 下，十字排列。 */
-    private static final int CHAIN_SHAPE_Y = 92;
+    private static final int CHAIN_SHAPE_Y = 110;
     private static final int CHAIN_SHAPE_ROW_HEIGHT = 20;
     private static final int CHAIN_SHAPE_BUTTON_WIDTH = 38;
     /** 十字排列的三列（相对 GUI 的 x，整体在内容区居中）。 */
@@ -97,17 +106,24 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private static final int CHAIN_SHAPE_CENTER_X = 151;
     private static final int CHAIN_SHAPE_RIGHT_X = 195;
     /** 锁定方向、允许其它方块各占一整行。 */
-    private static final int CHAIN_LOCK_Y = 152;
-    private static final int CHAIN_ALLOW_OTHER_Y = 172;
-    private static final int CHAIN_HINT_Y = 196;
+    private static final int CHAIN_LOCK_Y = 170;
+    private static final int CHAIN_ALLOW_OTHER_Y = 190;
+    private static final int CHAIN_HINT_Y = 210;
 
     /** 快速建造页：各行的纵坐标。 */
     private static final int BUILD_PRESET_Y = 32;
-    private static final int BUILD_OPERATION_Y = 54;
-    private static final int BUILD_DIMENSION_Y = 74;
-    private static final int BUILD_SHAPE_Y = 94;
-    private static final int BUILD_FILL_Y = 114;
-    private static final int BUILD_HINT_Y = 140;
+    /** 预设名称（可以直接编辑的文字框，不写标题）。 */
+    private static final int BUILD_PRESET_NAME_Y = 48;
+    private static final int BUILD_OPERATION_Y = 68;
+    private static final int BUILD_DIMENSION_Y = 88;
+    private static final int BUILD_SHAPE_Y = 108;
+    private static final int BUILD_FILL_Y = 128;
+    private static final int BUILD_HINT_Y = 152;
+
+    /** 蓝图建造页：说明文字、自动收集流体开关和操作提示的纵坐标。 */
+    private static final int COPY_PASTE_DESC_Y = 34;
+    private static final int COPY_PASTE_FLUID_Y = 60;
+    private static final int COPY_PASTE_HINT_Y = 82;
 
     /** 当前界面里的设置（和客户端缓存保持同步）。 */
     private ToolkitSettings settings = ToolkitSettingsCache.get();
@@ -116,10 +132,18 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private Feature activeFeature = Feature.HOTBAR_SWAP;
 
     /** 各功能页的按钮，切换功能页时整组显示/隐藏。 */
+    private final List<AbstractWidget> hotbarSwapWidgets = new ArrayList<>();
     private final List<AbstractWidget> autoRefillWidgets = new ArrayList<>();
     private final List<AbstractWidget> chainMiningWidgets = new ArrayList<>();
     private final List<AbstractWidget> quickBuildWidgets = new ArrayList<>();
+    private final List<AbstractWidget> copyPasteWidgets = new ArrayList<>();
 
+    private Button swapRowButton;
+    /** 预设名称文字框（连锁破坏 / 快速建造各一个；不画标题，直接编辑）。 */
+    private EditBox presetNameField;
+    private EditBox buildPresetNameField;
+    /** 程序设置文字框内容时，忽略它触发的改名回调。 */
+    private boolean updatingNameFields;
     private Button exactMatchButton;
     private Button chainLimitButton;
     private Button presetPrevButton;
@@ -143,6 +167,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private Button buildDimensionButton;
     private Button buildShapeButton;
     private Button buildFillButton;
+    private Button collectFluidsButton;
 
     public ToolkitScreen(ToolkitMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
@@ -158,9 +183,11 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         this.settings = ToolkitSettingsCache.get();
 
         // init 在窗口大小变化、从别的界面返回时会再次调用，先清空上一次的分组
+        this.hotbarSwapWidgets.clear();
         this.autoRefillWidgets.clear();
         this.chainMiningWidgets.clear();
         this.quickBuildWidgets.clear();
+        this.copyPasteWidgets.clear();
 
         int x = this.leftPos;
         int y = this.topPos;
@@ -171,7 +198,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.close")))
                 .build());
 
-        // 左侧：3 个功能按钮，点击后右边显示对应功能的内容
+        // 左侧：功能按钮，点击后右边显示对应功能的内容
         Feature[] features = Feature.values();
         for (int i = 0; i < features.length; i++) {
             Feature feature = features[i];
@@ -179,6 +206,12 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                     x + TAB_X, y + TAB_TOP + i * (TAB_HEIGHT + TAB_GAP), TAB_WIDTH, TAB_HEIGHT,
                     feature, pressed -> this.selectFeature(feature)));
         }
+
+        // 物品切换：交换行（与快捷栏交换的背包行，1 = 最上面一行，3 = 最后一行）
+        this.swapRowButton = this.addToGroup(new StepperButton(
+                x + SETTINGS_X, y + HOTBAR_SWAP_ROW_Y, SETTINGS_WIDTH, 14, Component.empty(),
+                Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.swap_row.tooltip")),
+                () -> this.changeSwapRow(1), () -> this.changeSwapRow(-1)), this.hotbarSwapWidgets);
 
         // 自动补充：补充物品是否完全一致（放在白名单上方）
         this.exactMatchButton = this.addToGroup(Button
@@ -221,6 +254,18 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 .bounds(x + 220, y + CHAIN_PRESET_Y, 28, 14)
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.preset.delete.tooltip")))
                 .build(), this.chainMiningWidgets);
+
+        // 预设名称：切换行下面单独一行，直接编辑（不写“预设名称”这几个字）
+        this.presetNameField = this.addToGroup(new EditBox(this.font,
+                x + SETTINGS_X, y + CHAIN_PRESET_NAME_Y, SETTINGS_WIDTH, 14, Component.empty()),
+                this.chainMiningWidgets);
+        this.presetNameField.setMaxLength(ToolkitSettings.MAX_PRESET_NAME_LENGTH);
+        this.presetNameField.setValue(this.settings.preset().name());
+        this.presetNameField.setResponder(value -> {
+            if (!this.updatingNameFields) {
+                this.renameChainPreset(value);
+            }
+        });
 
         // 大量方块：十字排列（上 / 左·层数·右 / 下）
         this.shapeUpButton = this.addToGroup(this.createShapeButton(
@@ -284,6 +329,18 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.preset.delete.tooltip")))
                 .build(), this.quickBuildWidgets);
 
+        // 预设名称：切换行下面单独一行，直接编辑（不写“预设名称”这几个字）
+        this.buildPresetNameField = this.addToGroup(new EditBox(this.font,
+                x + SETTINGS_X, y + BUILD_PRESET_NAME_Y, SETTINGS_WIDTH, 14, Component.empty()),
+                this.quickBuildWidgets);
+        this.buildPresetNameField.setMaxLength(ToolkitSettings.MAX_PRESET_NAME_LENGTH);
+        this.buildPresetNameField.setValue(this.settings.buildPreset().name());
+        this.buildPresetNameField.setResponder(value -> {
+            if (!this.updatingNameFields) {
+                this.renameBuildPreset(value);
+            }
+        });
+
         // 快速建造：操作 / 维度 / 形状 / 填充（左键下一个、右键上一个，循环）
         this.buildOperationButton = this.addToGroup(new StepperButton(
                 x + SETTINGS_X, y + BUILD_OPERATION_Y, SETTINGS_WIDTH, 14, Component.empty(),
@@ -302,6 +359,14 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 Tooltip.create(Component.empty()),
                 () -> this.changeBuildFill(1), () -> this.changeBuildFill(-1)), this.quickBuildWidgets);
 
+        // 蓝图建造：自动收集流体（默认开）
+        this.collectFluidsButton = this.addToGroup(Button
+                .builder(Component.empty(), button -> this.applySettings(
+                        this.settings.withCollectFluids(!this.settings.collectFluids())))
+                .bounds(x + SETTINGS_X, y + COPY_PASTE_FLUID_Y, SETTINGS_WIDTH, 14)
+                .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.collect_fluids.tooltip")))
+                .build(), this.copyPasteWidgets);
+
         this.updateButtonLabels();
         this.updateFeatureVisibility();
     }
@@ -318,15 +383,24 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         if (this.activeFeature == feature) {
             return;
         }
+        // 切页时让名称文字框失焦，避免看不见的文字框继续接收键盘输入
+        if (this.presetNameField != null) {
+            this.presetNameField.setFocused(false);
+        }
+        if (this.buildPresetNameField != null) {
+            this.buildPresetNameField.setFocused(false);
+        }
         this.activeFeature = feature;
         this.updateFeatureVisibility();
     }
 
     /** 只显示当前功能页的按钮；白名单格子和玩家背包/快捷栏也只属于“自动补充”页。 */
     private void updateFeatureVisibility() {
+        setGroupVisible(this.hotbarSwapWidgets, this.activeFeature == Feature.HOTBAR_SWAP);
         setGroupVisible(this.autoRefillWidgets, this.activeFeature == Feature.AUTO_REFILL);
         setGroupVisible(this.chainMiningWidgets, this.activeFeature == Feature.CHAIN_MINING);
         setGroupVisible(this.quickBuildWidgets, this.activeFeature == Feature.QUICK_BUILD);
+        setGroupVisible(this.copyPasteWidgets, this.activeFeature == Feature.COPY_PASTE);
 
         boolean autoRefill = this.activeFeature == Feature.AUTO_REFILL;
         this.menu.setWhitelistVisible(autoRefill);
@@ -384,6 +458,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
             case AUTO_REFILL -> this.renderAutoRefillLabels(guiGraphics);
             case CHAIN_MINING -> this.renderChainMiningLabels(guiGraphics);
             case QUICK_BUILD -> this.renderQuickBuildLabels(guiGraphics);
+            case COPY_PASTE -> this.renderCopyPasteLabels(guiGraphics);
         }
 
         // 下方：玩家背包（只在“自动补充”页显示，用来往白名单里放物品）
@@ -432,6 +507,25 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         this.drawContentTitle(guiGraphics);
         this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.build.hint",
                 AliyasToolkitClient.QUICK_BUILD_KEY.getTranslatedKeyMessage()), SETTINGS_X, BUILD_HINT_Y, HINT_COLOR);
+    }
+
+    /** 蓝图建造页的文字：功能说明 + 选区 / 装箱 / 预览建造的用法。 */
+    private void renderCopyPasteLabels(GuiGraphics guiGraphics) {
+        this.drawContentTitle(guiGraphics);
+        int y = this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.copy_paste.description"),
+                SETTINGS_X, COPY_PASTE_DESC_Y, TEXT_COLOR);
+        y = Math.max(y + 4, COPY_PASTE_HINT_Y);
+        y = this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.copy_paste.hint.select",
+                AliyasToolkitClient.BLUEPRINT_BUILD_KEY.getTranslatedKeyMessage(),
+                AliyasToolkitClient.BLUEPRINT_SNAP_KEY.getTranslatedKeyMessage()), SETTINGS_X, y, HINT_COLOR);
+        y = this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.copy_paste.hint.place",
+                AliyasToolkitClient.BLUEPRINT_BUILD_KEY.getTranslatedKeyMessage(),
+                AliyasToolkitClient.BLUEPRINT_ROTATE_KEY.getTranslatedKeyMessage()), SETTINGS_X, y, HINT_COLOR);
+        this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.copy_paste.hint.finish",
+                AliyasToolkitClient.BLUEPRINT_BUILD_KEY.getTranslatedKeyMessage(),
+                AliyasToolkitClient.BLUEPRINT_MODE_KEY.getTranslatedKeyMessage(),
+                AliyasToolkitClient.BLUEPRINT_EXIT_KEY.getTranslatedKeyMessage(),
+                AliyasToolkitClient.BLUEPRINT_OPEN_BOX_KEY.getTranslatedKeyMessage()), SETTINGS_X, y, HINT_COLOR);
     }
 
     private void drawContentTitle(GuiGraphics guiGraphics) {
@@ -487,6 +581,108 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private void changeChainLimit(int direction) {
         int step = hasShiftDown() ? 16 : 1;
         this.applySettings(this.settings.withChainLimit(this.settings.chainLimit() + direction * step));
+    }
+
+    /** 交换行：左键 +1、右键 -1（1-3）。 */
+    private void changeSwapRow(int direction) {
+        this.applySettings(this.settings.withSwapRow(this.settings.swapRow() + direction));
+    }
+
+    /**
+     * 改名：文字框每敲一个字都会触发，直接按普通设置的流程立即同步给服务端。
+     * <p>
+     * 不能等关闭界面时再发：关闭流程里“设置包”和“关闭容器包”的先后不好保证，
+     * 服务端要求设置界面还开着（{@code containerMenu} 是 {@code ToolkitMenu}）才接受修改，
+     * 晚发的包会被丢弃，表现为重开界面/切换预设后名称又变回去。
+     */
+    private void renameChainPreset(String name) {
+        this.applySettings(this.settings.withPresetName(name));
+    }
+
+    private void renameBuildPreset(String name) {
+        this.applySettings(this.settings.withBuildPresetName(name));
+    }
+
+    /** 把当前预设名称同步到文字框（程序设置内容时不触发改名回调，正在输入的框不动）。 */
+    private void updateNameFields() {
+        if (this.presetNameField == null || this.buildPresetNameField == null) {
+            return;
+        }
+        this.updatingNameFields = true;
+        try {
+            String chainName = this.settings.preset().name();
+            // 聚焦中的框不覆盖：玩家可能正在清空重输（空名称会被补成“预设N”）
+            if (!this.presetNameField.isFocused() && !this.presetNameField.getValue().equals(chainName)) {
+                this.presetNameField.setValue(chainName);
+            }
+            String buildName = this.settings.buildPreset().name();
+            if (!this.buildPresetNameField.isFocused() && !this.buildPresetNameField.getValue().equals(buildName)) {
+                this.buildPresetNameField.setValue(buildName);
+            }
+        } finally {
+            this.updatingNameFields = false;
+        }
+    }
+
+    /** 预设切换按钮只有 68 宽，名字太长时截断显示（完整名字在下面的文字框里）。 */
+    private String shortName(String name) {
+        if (this.font.width(name) <= 62) {
+            return name;
+        }
+        return this.font.plainSubstrByWidth(name, 54) + "...";
+    }
+
+    /** 是否有预设名称文字框正处于编辑状态。 */
+    private boolean isNameFieldFocused() {
+        return (this.presetNameField != null && this.presetNameField.isFocused())
+                || (this.buildPresetNameField != null && this.buildPresetNameField.isFocused());
+    }
+
+    /**
+     * 文字框聚焦时禁用界面/快捷键：普通字母键原版输入框不“消费”，
+     * 会继续传给 {@link AbstractContainerScreen}，例如在名称里打 e 会直接关掉界面。
+     * <p>
+     * 这里先让输入框自己处理（退格、方向键、Ctrl+A/C/V、回车等），
+     * 剩下的按键全部吞掉；Esc 关闭界面、Tab 保留原版的焦点切换。
+     * 点击别处让输入框失焦后，快捷键恢复正常。
+     */
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (!this.isNameFieldFocused()) {
+            return super.keyPressed(keyCode, scanCode, modifiers);
+        }
+        if (this.getFocused() != null && this.getFocused().keyPressed(keyCode, scanCode, modifiers)) {
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            this.onClose();
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+            // 回车：结束编辑（名称已经实时保存），恢复快捷键
+            this.setFocused(null);
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_TAB) {
+            return super.keyPressed(keyCode, scanCode, modifiers);
+        }
+        return true;
+    }
+
+    /**
+     * 点击输入框以外的地方（空白处、按钮、格子）时让输入框失焦，之后的快捷键恢复正常。
+     * <p>
+     * 不能看 {@code super.mouseClicked} 的返回值：原版容器界面点空白处也会返回 true。
+     * 这里直接按点击位置判断；随后 super 会把焦点交给真正被点到的控件（按钮 / 另一个输入框）。
+     */
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (this.isNameFieldFocused()
+                && !this.presetNameField.isMouseOver(mouseX, mouseY)
+                && !this.buildPresetNameField.isMouseOver(mouseX, mouseY)) {
+            this.setFocused(null);
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 
     /** side：0=上 1=下 2=左 3=右。 */
@@ -568,9 +764,10 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 onOff(this.settings.requireExactItemMatch())));
         this.chainLimitButton.setMessage(Component.translatable("gui.aliyastoolkit.settings.chain_limit",
                 this.settings.chainLimit()));
+        this.swapRowButton.setMessage(Component.translatable("gui.aliyastoolkit.settings.swap_row",
+                this.settings.swapRow()));
 
-        this.presetNameButton.setMessage(Component.translatable("gui.aliyastoolkit.settings.preset.name",
-                this.settings.selectedPreset() + 1, this.settings.presets().size()));
+        this.presetNameButton.setMessage(Component.literal(shortName(preset.name())));
         this.presetNameButton.setTooltip(Tooltip.create(Component.translatable(
                 "gui.aliyastoolkit.settings.preset.summary",
                 preset.up(), preset.down(), preset.left(), preset.right(), preset.length(),
@@ -589,8 +786,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 onOff(this.settings.allowBreakingOtherBlocks())));
 
         BuildPreset build = this.settings.buildPreset();
-        this.buildPresetNameButton.setMessage(Component.translatable("gui.aliyastoolkit.settings.preset.name",
-                this.settings.selectedBuildPreset() + 1, this.settings.buildPresets().size()));
+        this.buildPresetNameButton.setMessage(Component.literal(shortName(build.name())));
         this.buildPresetNameButton.setTooltip(Tooltip.create(Component.translatable(
                 "gui.aliyastoolkit.build.preset.summary",
                 Component.translatable(build.operation().translationKey()),
@@ -605,6 +801,8 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 Component.translatable(build.shape().translationKey())));
         this.buildFillButton.setMessage(Component.translatable("gui.aliyastoolkit.build.fill",
                 Component.translatable(build.fill().translationKey())));
+        this.collectFluidsButton.setMessage(Component.translatable(
+                "gui.aliyastoolkit.settings.collect_fluids", onOff(this.settings.collectFluids())));
 
         // 鼠标悬停时显示这个设置当前可选的全部内容（当前项用 [] 标出）
         this.buildOperationButton.setTooltip(Tooltip.create(buildOptionsTooltip(
@@ -637,6 +835,9 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         // 只有一个可选项时把形状/填充按钮变灰
         this.buildShapeButton.active = BuildPreset.shapesFor(build.dimension()).size() > 1;
         this.buildFillButton.active = BuildPreset.fillsFor(build.dimension(), build.shape()).size() > 1;
+
+        // 名称文字框跟当前预设保持一致（切换/新建/删除预设后）
+        this.updateNameFields();
     }
 
     private static Component onOff(boolean value) {
@@ -728,7 +929,8 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         HOTBAR_SWAP("gui.aliyastoolkit.tab.hotbar_swap"),
         AUTO_REFILL("gui.aliyastoolkit.tab.auto_refill"),
         CHAIN_MINING("gui.aliyastoolkit.tab.chain_mining"),
-        QUICK_BUILD("gui.aliyastoolkit.tab.quick_build");
+        QUICK_BUILD("gui.aliyastoolkit.tab.quick_build"),
+        COPY_PASTE("gui.aliyastoolkit.tab.copy_paste");
 
         private final String translationKey;
 

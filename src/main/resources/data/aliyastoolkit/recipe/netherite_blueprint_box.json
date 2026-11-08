@@ -1,0 +1,7 @@
+{
+  "type": "minecraft:smithing_transform",
+  "template": { "item": "minecraft:netherite_upgrade_smithing_template" },
+  "base": { "item": "aliyastoolkit:diamond_blueprint_box" },
+  "addition": { "item": "minecraft:netherite_ingot" },
+  "result": { "id": "aliyastoolkit:netherite_blueprint_box", "count": 1 }
+}

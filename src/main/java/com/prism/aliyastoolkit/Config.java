@@ -13,7 +13,7 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 public class Config {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
-    /** 快捷键“快捷栏与背包最后一行交换”的开关。 */
+    /** 快捷键“快捷栏与背包指定行交换”的开关。 */
     public static final ModConfigSpec.BooleanValue ENABLE_HOTBAR_SWAP = BUILDER
             .comment("Enable the hotbar swap key. When enabled, pressing the key swaps the hotbar with the last inventory row.")
             .define("enableHotbarSwap", true);
@@ -38,6 +38,14 @@ public class Config {
                     "When enabled, pressing the quick-build key (default C) toggles quick build; right click twice to plan a region and build it with the block in your main hand.",
                     "Quick-build presets are configured per player in the in-game \"Aliya's Toolkit\" screen.")
             .define("enableQuickBuild", true);
+
+    /** 剪切复制的总开关。 */
+    public static final ModConfigSpec.BooleanValue ENABLE_COPY_PASTE = BUILDER
+            .comment(
+                    "Enable blueprint build.",
+                    "Hold a blueprint box and use the blueprint-build key (default Ctrl + right click) to enter; using an empty box opens draw mode.",
+                    "All blueprint shortcut keys can be changed in Options -> Controls -> Key Binds.")
+            .define("enableCopyPaste", true);
 
     static final ModConfigSpec SPEC = BUILDER.build();
 }
