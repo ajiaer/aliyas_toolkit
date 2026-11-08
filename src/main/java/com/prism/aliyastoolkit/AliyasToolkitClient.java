@@ -1,13 +1,23 @@
 package com.prism.aliyastoolkit;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.prism.aliyastoolkit.client.ChainMiningClient;
+import com.prism.aliyastoolkit.client.BlueprintBoxItemRenderer;
+import com.prism.aliyastoolkit.client.BlueprintBoxRenderer;
+import com.prism.aliyastoolkit.client.BlueprintBoxScreen;
 import com.prism.aliyastoolkit.client.ClientAutoRefill;
+import com.prism.aliyastoolkit.client.CopyPasteClient;
+import com.prism.aliyastoolkit.client.ExclusiveModes;
+import com.prism.aliyastoolkit.client.OrderedKeyMapping;
+import com.prism.aliyastoolkit.client.QuickBuildClient;
 import com.prism.aliyastoolkit.client.ToolkitScreen;
+import com.prism.aliyastoolkit.blueprint.BlueprintBoxes;
 import com.prism.aliyastoolkit.network.OpenToolkitPayload;
 import com.prism.aliyastoolkit.network.SwapHotbarPayload;
 
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
 import net.minecraft.network.ConnectionProtocol;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
@@ -18,8 +28,11 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
+import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
+import net.neoforged.neoforge.client.extensions.common.RegisterClientExtensionsEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.client.settings.KeyConflictContext;
@@ -34,6 +47,22 @@ import org.lwjgl.glfw.GLFW;
 // You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent
 @EventBusSubscriber(modid = AliyasToolkit.MODID, value = Dist.CLIENT)
 public class AliyasToolkitClient {
+    /**
+     * 物品栏/掉落物也使用蓝图箱自己的 ChestRenderer，保证和世界中方块一致。
+     * 自定义渲染器延迟创建，避免在客户端资源还没初始化时访问 Minecraft。
+     */
+    private static final IClientItemExtensions BLUEPRINT_BOX_ITEM_EXTENSIONS = new IClientItemExtensions() {
+        private BlueprintBoxItemRenderer renderer;
+
+        @Override
+        public BlockEntityWithoutLevelRenderer getCustomRenderer() {
+            if (this.renderer == null) {
+                this.renderer = new BlueprintBoxItemRenderer();
+            }
+            return this.renderer;
+        }
+    };
+
     /** 按键绑定分类（显示在“选项 -> 控制 -> 按键绑定”里的分类名）。 */
     public static final String KEY_CATEGORY = "key.categories." + AliyasToolkit.MODID;
 
@@ -43,12 +72,12 @@ public class AliyasToolkitClient {
      * 默认 X，玩家可以在“选项 -> 控制 -> 按键绑定”里改成任意键，
      * 绑定结果会保存到 {@code options.txt}（形如 {@code key_key.aliyastoolkit.swap_hotbar:key.keyboard.x}）。
      */
-    public static final KeyMapping SWAP_HOTBAR_KEY = new KeyMapping(
+    public static final KeyMapping SWAP_HOTBAR_KEY = new OrderedKeyMapping(
             "key." + AliyasToolkit.MODID + ".swap_hotbar",
             KeyConflictContext.IN_GAME, // 只在游戏内生效，不会和 GUI 里的按键冲突
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_X,
-            KEY_CATEGORY);
+            KEY_CATEGORY, 1);
 
     /**
      * 打开“Aliya's Toolkit 配置”界面的快捷键。
@@ -56,13 +85,13 @@ public class AliyasToolkitClient {
      * 默认 Alt + X（同样可以在控制界面里修改）。带修饰键的绑定不会和上面的单键 X 互相触发：
      * NeoForge 的按键查找会按当前按下的修饰键过滤。
      */
-    public static final KeyMapping OPEN_TOOLKIT_KEY = new KeyMapping(
+    public static final KeyMapping OPEN_TOOLKIT_KEY = new OrderedKeyMapping(
             "key." + AliyasToolkit.MODID + ".open_toolkit",
             KeyConflictContext.IN_GAME,
             KeyModifier.ALT,
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_X,
-            KEY_CATEGORY);
+            KEY_CATEGORY, 0);
 
     /**
      * 连锁破坏的快捷键。
@@ -70,12 +99,12 @@ public class AliyasToolkitClient {
      * 默认 Z。固定为“切换”：按一下开启，再按一下关闭；按住它滚动滚轮可以切换“大量方块”预设。
      * 键位可以在“选项 -> 控制 -> 按键绑定”里修改。
      */
-    public static final KeyMapping CHAIN_MINE_KEY = new KeyMapping(
+    public static final KeyMapping CHAIN_MINE_KEY = new OrderedKeyMapping(
             "key." + AliyasToolkit.MODID + ".chain_mine",
             KeyConflictContext.IN_GAME,
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_Z,
-            KEY_CATEGORY);
+            KEY_CATEGORY, 2);
 
     /**
      * 快速建造的快捷键。
@@ -85,14 +114,76 @@ public class AliyasToolkitClient {
      * 默认 C。固定为“切换”：按一下开启，再按一下关闭；按住它滚动滚轮可以切换快速建造预设。
      * 开启快速建造会自动关闭连锁破坏（两者最多同时开启一个）。
      */
-    public static final KeyMapping QUICK_BUILD_KEY = new KeyMapping(
+    public static final KeyMapping QUICK_BUILD_KEY = new OrderedKeyMapping(
             "key." + AliyasToolkit.MODID + ".quick_build",
             KeyConflictContext.IN_GAME,
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_C,
-            KEY_CATEGORY);
+            KEY_CATEGORY, 3);
+
+    /**
+     * 主手拿着蓝图箱时，Alt + 右键打开蓝图箱界面（等同于右键世界里的蓝图箱方块）。
+     * <p>
+     * 所有蓝图相关快捷键都可以在“选项 -> 控制 -> 按键绑定”里修改。
+     */
+    public static final KeyMapping BLUEPRINT_OPEN_BOX_KEY = new OrderedKeyMapping(
+            "key." + AliyasToolkit.MODID + ".blueprint_open_box",
+            KeyConflictContext.IN_GAME,
+            KeyModifier.ALT,
+            InputConstants.Type.MOUSE,
+            GLFW.GLFW_MOUSE_BUTTON_RIGHT,
+            KEY_CATEGORY, 4);
+
+    /**
+     * 蓝图建造主按键：手持蓝图箱时 Ctrl + 右键进入蓝图建造；
+     * 绘制模式下记录蓝图并退出；建造模式下（固定虚影后）检查材料并建造。
+     */
+    public static final KeyMapping BLUEPRINT_BUILD_KEY = new OrderedKeyMapping(
+            "key." + AliyasToolkit.MODID + ".blueprint_build",
+            KeyConflictContext.IN_GAME,
+            KeyModifier.CONTROL,
+            InputConstants.Type.MOUSE,
+            GLFW.GLFW_MOUSE_BUTTON_RIGHT,
+            KEY_CATEGORY, 5);
+
+    /** 蓝图建造：在没有物品的蓝图箱上切换绘制 / 建造模式。 */
+    public static final KeyMapping BLUEPRINT_MODE_KEY = new OrderedKeyMapping(
+            "key." + AliyasToolkit.MODID + ".blueprint_mode",
+            KeyConflictContext.IN_GAME,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_TAB,
+            KEY_CATEGORY, 6);
+
+    /** 蓝图建造：旋转建造虚影。 */
+    public static final KeyMapping BLUEPRINT_ROTATE_KEY = new OrderedKeyMapping(
+            "key." + AliyasToolkit.MODID + ".blueprint_rotate",
+            KeyConflictContext.IN_GAME,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_V,
+            KEY_CATEGORY, 8);
+
+    /** 蓝图绘制：按住时把选点吸附到指向方块的外侧（快速建造选点位置）。 */
+    public static final KeyMapping BLUEPRINT_SNAP_KEY = new OrderedKeyMapping(
+            "key." + AliyasToolkit.MODID + ".blueprint_snap",
+            KeyConflictContext.IN_GAME,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_LEFT_SHIFT,
+            KEY_CATEGORY, 7);
+
+    /** 蓝图建造：退出当前模式。 */
+    public static final KeyMapping BLUEPRINT_EXIT_KEY = new OrderedKeyMapping(
+            "key." + AliyasToolkit.MODID + ".blueprint_exit",
+            KeyConflictContext.IN_GAME,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_GRAVE_ACCENT,
+            KEY_CATEGORY, 9);
 
     public AliyasToolkitClient(IEventBus modEventBus, ModContainer container) {
+        // 互斥模式：连锁破坏、快速建造、剪切复制同一时间最多开启一个
+        ExclusiveModes.register(ExclusiveModes.CHAIN_MINING, ChainMiningClient::forceDisable);
+        ExclusiveModes.register(ExclusiveModes.QUICK_BUILD, QuickBuildClient::forceDisable);
+        ExclusiveModes.register(ExclusiveModes.COPY_PASTE, CopyPasteClient::forceDisable);
+
         // Allows NeoForge to create a config screen for this mod's configs.
         // The config screen is accessed by going to the Mods screen > clicking on your mod > clicking on config.
         // Do not forget to add translations for your config options to the en_us.json file.
@@ -102,23 +193,44 @@ public class AliyasToolkitClient {
         modEventBus.addListener(AliyasToolkitClient::onRegisterKeyMappings);
         // 容器菜单对应的界面也要注册，否则打开配置界面时客户端不知道怎么画
         modEventBus.addListener(AliyasToolkitClient::onRegisterMenuScreens);
+        // 蓝图箱使用原版 ChestRenderer 的箱子模型和翻盖动画
+        modEventBus.addListener(AliyasToolkitClient::onRegisterRenderers);
+        // 物品栏/掉落物使用同一个箱子渲染器
+        modEventBus.addListener(AliyasToolkitClient::onRegisterClientExtensions);
     }
 
     private static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
-        event.register(SWAP_HOTBAR_KEY);
         event.register(OPEN_TOOLKIT_KEY);
+        event.register(SWAP_HOTBAR_KEY);
         event.register(CHAIN_MINE_KEY);
         event.register(QUICK_BUILD_KEY);
+        event.register(BLUEPRINT_OPEN_BOX_KEY);
+        event.register(BLUEPRINT_BUILD_KEY);
+        event.register(BLUEPRINT_MODE_KEY);
+        event.register(BLUEPRINT_SNAP_KEY);
+        event.register(BLUEPRINT_ROTATE_KEY);
+        event.register(BLUEPRINT_EXIT_KEY);
     }
 
     private static void onRegisterMenuScreens(RegisterMenuScreensEvent event) {
         event.register(AliyasToolkit.TOOLKIT_MENU.get(), ToolkitScreen::new);
+        event.register(AliyasToolkit.BLUEPRINT_BOX_MENU.get(), BlueprintBoxScreen::new);
+    }
+
+    private static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {
+        event.registerBlockEntityRenderer(BlueprintBoxes.BLUEPRINT_BOX_BE.get(), BlueprintBoxRenderer::new);
+    }
+
+    private static void onRegisterClientExtensions(RegisterClientExtensionsEvent event) {
+        for (var item : BlueprintBoxes.items()) {
+            event.registerItem(BLUEPRINT_BOX_ITEM_EXTENSIONS, item.get());
+        }
     }
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
         AliyasToolkit.LOGGER.info(
-                "Aliya's Toolkit client setup complete (swap: X, chain mining: Z, quick build: C, toolkit screen: Alt+X)");
+                "Aliya's Toolkit client setup complete (swap: X, chain mining: Z, quick build: C, blueprint: Ctrl+RMB / Alt+RMB, toolkit screen: Alt+X)");
     }
 
     /**

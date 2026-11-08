@@ -15,7 +15,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 /**
  * 客户端 -> 服务端：修改“Aliya's Toolkit 配置”界面里的设置。
  * <p>
- * 一次把三项设置整体发过去（而不是一项一个包），服务端会再校验一遍范围，
+ * 一次把整份设置发过去（而不是一项一个包），服务端会再校验一遍范围，
  * 保存到这名玩家自己的玩家数据里，并回发一份 {@link SyncToolkitSettingsPayload} 作为确认。
  */
 public record SetToolkitSettingsPayload(ToolkitSettings settings) implements CustomPacketPayload {

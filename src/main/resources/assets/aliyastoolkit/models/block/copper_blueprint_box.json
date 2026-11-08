@@ -1,0 +1,6 @@
+{
+  "parent": "aliyastoolkit:block/blueprint_box_base",
+  "textures": {
+    "trim": "minecraft:block/copper_block"
+  }
+}

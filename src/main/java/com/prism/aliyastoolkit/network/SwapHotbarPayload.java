@@ -1,8 +1,9 @@
 package com.prism.aliyastoolkit.network;
 
+import com.prism.aliyastoolkit.AliyasToolkit;
 import com.prism.aliyastoolkit.Config;
 import com.prism.aliyastoolkit.HotbarSwapper;
-import com.prism.aliyastoolkit.AliyasToolkit;
+import com.prism.aliyastoolkit.ToolkitSettings;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -12,9 +13,9 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
- * 客户端 -> 服务端：请求把快捷栏和背包最后一行互换。
+ * 客户端 -> 服务端：请求把快捷栏和背包里设置好的那一行（“交换行”）互换。
  * <p>
- * 这个包不带任何数据（交换的槽位是固定的），所以用 {@link StreamCodec#unit(Object)} 作为编解码器。
+ * 这个包不带任何数据（具体哪一行由服务端保存的玩家设置决定），所以用 {@link StreamCodec#unit(Object)} 作为编解码器。
  */
 public record SwapHotbarPayload() implements CustomPacketPayload {
     /** 单例，发送时直接用这一个实例即可。 */
@@ -42,7 +43,8 @@ public record SwapHotbarPayload() implements CustomPacketPayload {
                 return;
             }
             if (context.player() instanceof ServerPlayer player) {
-                HotbarSwapper.swapHotbarWithLastRow(player);
+                ToolkitSettings settings = player.getData(AliyasToolkit.SETTINGS);
+                HotbarSwapper.swapHotbarWithRow(player, settings.swapRow());
             }
         });
     }
