@@ -32,8 +32,9 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 /**
  * 客户端 -> 服务端：把当前选区记录进主手的蓝图箱。
  * <p>
- * 服务端重新读取方块状态、方块实体和容器内容；容器内容会作为额外材料需求，
- * 剪切时同时填入箱子并移除源方块。
+ * 服务端重新读取方块状态、方块实体和容器内容。
+ * {@code cut = true} 时把材料填入箱子并移除源方块（剪切）；
+ * {@code cut = false} 时只保存蓝图，不改变源方块，也不向箱子放入材料（复制）。
  */
 public record BlueprintCreatePayload(boolean cut, BlockPos min, List<BlockPos> offsets)
         implements CustomPacketPayload {
@@ -141,7 +142,7 @@ public record BlueprintCreatePayload(boolean cut, BlockPos min, List<BlockPos> o
             BlueprintData blueprint = result.blueprint();
             int fluidCount = blueprint.fluidSourceCount();
             int skippedFluidSources = 0;
-            if (fluidCount > 0) {
+            if (payload.cut() && fluidCount > 0) {
                 int emptyBuckets = countEmptyBuckets(player);
                 if (emptyBuckets < fluidCount) {
                     skippedFluidSources = fluidCount;

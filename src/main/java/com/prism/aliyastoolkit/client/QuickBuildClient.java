@@ -21,7 +21,6 @@ import com.prism.aliyastoolkit.network.QuickBuildPayload;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderStateShard;
 import net.minecraft.client.renderer.RenderType;
@@ -39,7 +38,6 @@ import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -59,8 +57,9 @@ import org.lwjgl.glfw.GLFW;
  * 客户端的“快速建造”：
  * <ul>
  * <li>快捷键（默认 C）切换开关；按住快捷键滚动滚轮切换建造预设（不循环）。</li>
- * <li>开启时右键第一次记录第一个点，并按原版放置规则记下“在这里放下手持方块”得到的状态
- * （朝向 / 上下半 / 半砖上下半等）；之后每 tick 显示规划范围（绿色轮廓）和辅助线，</li>
+ * <li>开启时未选第一个点也会显示跟随准星的目标轮廓，选中第一个点后每 tick 显示规划范围（绿色轮廓）和辅助线；</li>
+ * <li>右键第一次记录第一个点，并按原版放置规则记下“在这里放下手持方块”得到的状态
+ * （朝向 / 上下半 / 半砖上下半等）；</li>
  * <li>右键第二次校验手持方块/数量后把请求发给服务端建造，所有方块都用第一个点的状态。</li>
  * <li>和连锁破坏互斥：开启一个会自动关闭另一个。</li>
  * </ul>
@@ -86,10 +85,6 @@ public final class QuickBuildClient {
             "aliyastoolkit_build_outline_front", RenderStateShard.LEQUAL_DEPTH_TEST, 2.0D);
     private static final RenderType HELPER_LINE = createLineType(
             "aliyastoolkit_build_helper_line", RenderStateShard.LEQUAL_DEPTH_TEST, 1.5D);
-    private static final RenderType FIRST_POINT_BOX = createLineType(
-            "aliyastoolkit_build_first_point", RenderStateShard.LEQUAL_DEPTH_TEST, 4.0D);
-
-    private static final double BOX_INFLATE = 0.002D;
 
     private static boolean enabled;
     private static boolean keyHeld;
@@ -208,6 +203,11 @@ public final class QuickBuildClient {
         scrolledWhileHeld = false;
         resetPlan();
         ExclusiveModes.deactivate(ExclusiveModes.QUICK_BUILD);
+    }
+
+    /** 当前是否开启快速建造。 */
+    public static boolean isEnabled() {
+        return enabled;
     }
 
     private static void resetPlan() {
@@ -422,13 +422,23 @@ public final class QuickBuildClient {
         resetPlan();
     }
 
-    /** 每 tick 刷新规划范围（绿色轮廓）和辅助线。 */
+    /** 每 tick 刷新规划范围（绿色轮廓）和辅助线；未选第一个点时显示跟随准星的单格预览。 */
     private static void updatePreview(Minecraft minecraft, LocalPlayer player) {
         if (firstPoint == null) {
-            rawTarget = null;
-            plannedPoint = null;
-            outline = List.of();
-            plannedCount = 0;
+            // 开启快速建造后、第一次右键之前，也让目标格跟随准星显示，便于确认当前模式已开启。
+            BlockPos target = pickTarget(minecraft);
+            rawTarget = target;
+            if (target == null) {
+                plannedPoint = null;
+                plannedBox = null;
+                outline = List.of();
+                plannedCount = 0;
+                return;
+            }
+            plannedPoint = target;
+            plannedBox = target;
+            plannedCount = 1;
+            outline = ChainMining.collectOutlineEdges(List.of(target));
             return;
         }
         BlockPos target = pickTarget(minecraft);
@@ -555,7 +565,7 @@ public final class QuickBuildClient {
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_BLOCK_ENTITIES) {
             return;
         }
-        if (outline.isEmpty() && firstPoint == null) {
+        if (outline.isEmpty()) {
             return;
         }
 
@@ -581,13 +591,7 @@ public final class QuickBuildClient {
         }
         buffers.endBatch(OUTLINE_FRONT);
 
-        // 第一个点：更粗的一点绿色框
-        if (firstPoint != null) {
-            VertexConsumer box = buffers.getBuffer(FIRST_POINT_BOX);
-            LevelRenderer.renderLineBox(poseStack, box, new AABB(firstPoint).inflate(BOX_INFLATE),
-                    FRONT_RED, FRONT_GREEN, FRONT_BLUE, 1.0F);
-            buffers.endBatch(FIRST_POINT_BOX);
-        }
+        // 第二个点确定前只显示规划范围轮廓；不再单独绘制第一个点的粗框。
 
         // 指示器位置到实际规划位置之间的辅助线
         if (rawTarget != null && plannedPoint != null && !rawTarget.equals(plannedPoint)) {

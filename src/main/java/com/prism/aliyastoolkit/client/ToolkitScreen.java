@@ -23,6 +23,7 @@ import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
@@ -45,11 +46,11 @@ import org.lwjgl.glfw.GLFW;
  * 各功能页的内容：
  * <ul>
  * <li>物品切换：功能说明文字 + “交换行”（与快捷栏交换的背包行，1-3）</li>
- * <li>自动补充：补充物品是否需要完全一致 + 3x3 物品白名单</li>
+ * <li>自动补充：补充物品是否需要完全一致 + 3x3 物品白名单（白名单和玩家背包使用原版槽位样式）</li>
  * <li>连锁破坏：连锁数量（左键 +1、右键 -1），以及只对石头/泥土这类大量方块生效的
  * 预设（预设名称 + 横截面 + 层数 + 锁定方向）</li>
  * <li>快速建造：预设名称 + 操作 / 维度 / 形状 / 填充</li>
- * <li>蓝图建造：功能说明 + 选区 / 收进蓝图箱 / 虚影预览 / 旋转 / 固定 / 建造的操作提示</li>
+ * <li>蓝图建造：功能说明 + 选区 / 剪切或复制记录 / 虚影预览 / 旋转 / 固定 / 建造的操作提示</li>
  * </ul>
  * 白名单格子和玩家背包/快捷栏只属于“自动补充”页：切到别的功能页时它们不绘制、也不响应鼠标。
  * 白名单格子：左键设置为当前拿着的物品（不消耗），右键清空。
@@ -59,9 +60,14 @@ import org.lwjgl.glfw.GLFW;
 public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private static final int PANEL_COLOR = 0xFFC6C6C6;
     private static final int BORDER_COLOR = 0xFF373737;
-    private static final int SLOT_COLOR = 0xFF8B8B8B;
     private static final int TEXT_COLOR = 0x404040;
     private static final int HINT_COLOR = 0xFF555555;
+    /** 原版 6 行箱子纹理；自动补充页的槽位从这里裁取，保持原版界面样式。 */
+    private static final ResourceLocation GENERIC_54 =
+            ResourceLocation.withDefaultNamespace("textures/gui/container/generic_54.png");
+    /** generic_54 中单个槽位（含 1 像素边框）的 18×18 区域。 */
+    private static final int VANILLA_SLOT_SOURCE_X = 7;
+    private static final int VANILLA_SLOT_SOURCE_Y = 17;
     /** 当前功能按钮的高亮色。 */
     private static final int ACCENT_COLOR = 0xFF3A7D32;
 
@@ -435,15 +441,15 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         int accentY = top + TAB_TOP + this.activeFeature.ordinal() * (TAB_HEIGHT + TAB_GAP);
         guiGraphics.fill(left + TAB_X - 4, accentY, left + TAB_X - 2, accentY + TAB_HEIGHT, ACCENT_COLOR);
 
-        // 每个（当前可见的）格子画一个凹槽；白名单格子不在“自动补充”页时不画
+        // 每个（当前可见的）格子画一个原版凹槽；白名单格子不在“自动补充”页时不画
         for (Slot slot : this.menu.slots) {
             if (!slot.isActive()) {
                 continue;
             }
             int slotX = left + slot.x;
             int slotY = top + slot.y;
-            guiGraphics.fill(slotX - 1, slotY - 1, slotX + 17, slotY + 17, BORDER_COLOR);
-            guiGraphics.fill(slotX, slotY, slotX + 16, slotY + 16, SLOT_COLOR);
+            guiGraphics.blit(GENERIC_54, slotX - 1, slotY - 1,
+                    VANILLA_SLOT_SOURCE_X, VANILLA_SLOT_SOURCE_Y, 18, 18, 256, 256);
         }
     }
 
@@ -519,12 +525,13 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 AliyasToolkitClient.BLUEPRINT_BUILD_KEY.getTranslatedKeyMessage(),
                 AliyasToolkitClient.BLUEPRINT_SNAP_KEY.getTranslatedKeyMessage()), SETTINGS_X, y, HINT_COLOR);
         y = this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.copy_paste.hint.place",
+                AliyasToolkitClient.BLUEPRINT_CUT_KEY.getTranslatedKeyMessage(),
                 AliyasToolkitClient.BLUEPRINT_BUILD_KEY.getTranslatedKeyMessage(),
                 AliyasToolkitClient.BLUEPRINT_ROTATE_KEY.getTranslatedKeyMessage()), SETTINGS_X, y, HINT_COLOR);
         this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.copy_paste.hint.finish",
                 AliyasToolkitClient.BLUEPRINT_BUILD_KEY.getTranslatedKeyMessage(),
                 AliyasToolkitClient.BLUEPRINT_MODE_KEY.getTranslatedKeyMessage(),
-                AliyasToolkitClient.BLUEPRINT_EXIT_KEY.getTranslatedKeyMessage(),
+                AliyasToolkitClient.TOOLKIT_EXIT_KEY.getTranslatedKeyMessage(),
                 AliyasToolkitClient.BLUEPRINT_OPEN_BOX_KEY.getTranslatedKeyMessage()), SETTINGS_X, y, HINT_COLOR);
     }
 

@@ -293,6 +293,11 @@ public final class ChainMiningClient {
         }
     }
 
+    /** 当前是否处于连锁激活状态（包括刚切换、下一 tick 才更新 active 的短暂状态）。 */
+    public static boolean isActive() {
+        return toggled || active;
+    }
+
     /**
      * 按住连锁快捷键（默认 Z）时，用滚轮切换大量方块的预设：
      * 向下滚 → 下一个预设，向上滚 → 上一个预设；到两端就停住，不会循环（并阻止滚轮顺带切换快捷栏）。

@@ -77,9 +77,10 @@ import org.lwjgl.opengl.GL11;
  * <ul>
  * <li>手持蓝图箱，按 Ctrl + 右键（默认，可改键）进入蓝图建造。没有蓝图进入绘制模式，
  * 有蓝图进入建造模式。</li>
- * <li>绘制模式：右键两次新增选区（浅橙色动态预览），左键两次删除选区（浅红色动态预览），
- * 已确定选区为黄色；Ctrl + 右键记录蓝图、把物品收进箱子并退出。</li>
- * <li>建造模式：显示虚影，右键固定、左键解除固定，滚轮调整距离，R 旋转；
+ * <li>绘制模式：第一次选点前显示跟随准星的目标轮廓；右键两次新增选区（浅橙色动态预览），
+ * 左键两次删除选区（浅红色动态预览），已确定选区为黄色；Ctrl + 左键记录蓝图并收取材料（剪切），
+ * Ctrl + 右键只记录蓝图（复制），两者都会退出绘制模式。</li>
+ * <li>建造模式：显示虚影，右键固定、左键解除固定，滚轮调整距离，V 旋转；
  * 固定后 Ctrl + 右键检查材料并建造（不足会提示并退出）。</li>
  * <li>箱子没有物品时 Tab 切换绘制/建造模式；有物品时只能建造。</li>
  * <li>旧的 V 蓝图快捷键已废弃，所有蓝图快捷键都可以在按键绑定里修改。</li>
@@ -139,7 +140,11 @@ public final class CopyPasteClient {
     private static final RenderType OUTLINE_FRONT = createLineType(
             "aliyastoolkit_copy_paste_outline_front", RenderStateShard.LEQUAL_DEPTH_TEST, 2.0D);
 
-    /** 低透明度方块虚影；颜色由 ColorModulator 控制。 */
+    /**
+     * 低透明度方块虚影；颜色由 ColorModulator 控制。
+     * CULL 让方块背面不绘制，相邻虚影方块之间的隐藏面由 renderBatched 的 checkSides 剔除；
+     * 轮廓线使用独立的 RenderType，不受这里的剔除影响。
+     */
     private static final RenderType GHOST_BLOCK = RenderType.create(
             "aliyastoolkit_copy_paste_ghost",
             DefaultVertexFormat.BLOCK,
@@ -154,16 +159,14 @@ public final class CopyPasteClient {
                     .setLightmapState(RenderStateShard.LIGHTMAP)
                     .setDepthTestState(RenderStateShard.LEQUAL_DEPTH_TEST)
                     .setLayeringState(RenderStateShard.VIEW_OFFSET_Z_LAYERING)
-                    .setCullState(RenderStateShard.NO_CULL)
+                    .setCullState(RenderStateShard.CULL)
                     .setWriteMaskState(RenderStateShard.COLOR_WRITE)
                     .createCompositeState(false));
 
     private static Object lastLevel;
 
-    /** 已经划定的矩形区域。 */
-    private static final List<Region> REGIONS = new ArrayList<>();
-    /** 已经删除的矩形区域（从选区并集中扣除）。 */
-    private static final List<Region> REMOVAL_REGIONS = new ArrayList<>();
+    /** 选区操作按顺序执行：后一次添加可以恢复之前删除的范围。 */
+    private static final List<SelectionChange> SELECTION_CHANGES = new ArrayList<>();
     /** 选区里所有坐标（包含空气，便于右键点击判定）。 */
     private static List<BlockPos> selectionPositions = List.of();
     private static List<ChainMining.OutlineEdge> selectionOutline = List.of();
@@ -183,6 +186,8 @@ public final class CopyPasteClient {
     /** 当前动态预览的用途，用于决定轮廓颜色。 */
     private enum PreviewKind {
         NONE,
+        /** 未选第一个点时跟随准星的目标预览（淡黄色）。 */
+        SELECTION_FOLLOW,
         SELECTION_ADD,
         SELECTION_REMOVE,
         BUILD
@@ -256,6 +261,10 @@ public final class CopyPasteClient {
                         .setWriteMaskState(RenderStateShard.COLOR_WRITE)
                         .setCullState(RenderStateShard.NO_CULL)
                         .createCompositeState(false));
+    }
+
+    /** 一次添加 / 删除操作；按操作顺序重建，后一次操作覆盖前一次。 */
+    private record SelectionChange(boolean add, Region region) {
     }
 
     /** 一个矩形选区。 */
@@ -366,6 +375,11 @@ public final class CopyPasteClient {
         if (mode == Mode.NONE) {
             return;
         }
+        if (mode == Mode.SELECTING && matchesKey(AliyasToolkitClient.BLUEPRINT_CUT_KEY, event)) {
+            recordSelection(minecraft, true);
+            minecraft.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+            return;
+        }
         if (matchesKey(AliyasToolkitClient.BLUEPRINT_MODE_KEY, event)) {
             // Tab 默认也是原版玩家列表：在蓝图模式里清掉它的点击，避免按 Tab 时闪出玩家列表。
             minecraft.options.keyPlayerList.setDown(false);
@@ -377,10 +391,6 @@ public final class CopyPasteClient {
         if (matchesKey(AliyasToolkitClient.BLUEPRINT_ROTATE_KEY, event)) {
             rotate(minecraft);
             return;
-        }
-        if (matchesKey(AliyasToolkitClient.BLUEPRINT_EXIT_KEY, event)) {
-            forceDisable();
-            message("message.aliyastoolkit.copy_paste_off");
         }
     }
 
@@ -415,6 +425,13 @@ public final class CopyPasteClient {
             return;
         }
 
+        if (mode == Mode.SELECTING && matchesMouse(AliyasToolkitClient.BLUEPRINT_CUT_KEY, event.getButton())) {
+            event.setCanceled(true);
+            recordSelection(minecraft, true);
+            minecraft.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+            return;
+        }
+
         if (mode != Mode.NONE) {
             if (matchesMouse(AliyasToolkitClient.BLUEPRINT_MODE_KEY, event.getButton())) {
                 event.setCanceled(true);
@@ -424,12 +441,6 @@ public final class CopyPasteClient {
             if (matchesMouse(AliyasToolkitClient.BLUEPRINT_ROTATE_KEY, event.getButton())) {
                 event.setCanceled(true);
                 rotate(minecraft);
-                return;
-            }
-            if (matchesMouse(AliyasToolkitClient.BLUEPRINT_EXIT_KEY, event.getButton())) {
-                event.setCanceled(true);
-                forceDisable();
-                message("message.aliyastoolkit.copy_paste_off");
                 return;
             }
         }
@@ -557,10 +568,10 @@ public final class CopyPasteClient {
         }
     }
 
-    /** Ctrl + 右键：绘制模式记录蓝图，建造模式检查材料并建造。 */
+    /** Ctrl + 右键：绘制模式只记录蓝图（复制），建造模式检查材料并建造。 */
     private static void handleBlueprintTrigger(Minecraft minecraft) {
         if (mode == Mode.SELECTING) {
-            recordSelection(minecraft);
+            recordSelection(minecraft, false);
         } else if (mode == Mode.PLACING) {
             commitPlacement(minecraft);
         }
@@ -572,9 +583,13 @@ public final class CopyPasteClient {
         ExclusiveModes.deactivate(ExclusiveModes.COPY_PASTE);
     }
 
+    /** 当前是否处于蓝图绘制或建造模式。 */
+    public static boolean isActive() {
+        return mode != Mode.NONE;
+    }
+
     private static void resetAll() {
-        REGIONS.clear();
-        REMOVAL_REGIONS.clear();
+        SELECTION_CHANGES.clear();
         selectionPositions = List.of();
         selectionOutline = List.of();
         pendingPoint = null;
@@ -615,13 +630,13 @@ public final class CopyPasteClient {
     private static void clearBlueprintKeyClicks() {
         while (AliyasToolkitClient.BLUEPRINT_BUILD_KEY.consumeClick()) {
         }
+        while (AliyasToolkitClient.BLUEPRINT_CUT_KEY.consumeClick()) {
+        }
         while (AliyasToolkitClient.BLUEPRINT_MODE_KEY.consumeClick()) {
         }
         while (AliyasToolkitClient.BLUEPRINT_SNAP_KEY.consumeClick()) {
         }
         while (AliyasToolkitClient.BLUEPRINT_ROTATE_KEY.consumeClick()) {
-        }
-        while (AliyasToolkitClient.BLUEPRINT_EXIT_KEY.consumeClick()) {
         }
     }
 
@@ -720,21 +735,16 @@ public final class CopyPasteClient {
             message("message.aliyastoolkit.copy_paste_too_big", CopyPaste.MAX_VOLUME);
             return false;
         }
-        Set<BlockPos> union = new LinkedHashSet<>();
-        for (Region existing : REGIONS) {
-            existing.collectInto(union);
-        }
-        region.collectInto(union);
-        for (Region removal : REMOVAL_REGIONS) {
-            union.removeIf(removal::contains);
-        }
-        if (union.size() > CopyPaste.MAX_VOLUME) {
+        Set<BlockPos> candidate = new LinkedHashSet<>(selectionPositions);
+        region.collectInto(candidate);
+        if (candidate.size() > CopyPaste.MAX_VOLUME) {
             message("message.aliyastoolkit.copy_paste_too_big", CopyPaste.MAX_VOLUME);
             return false;
         }
-        REGIONS.add(region);
+        // 后添加的区域覆盖之前删除的区域，重建时按操作顺序执行。
+        SELECTION_CHANGES.add(new SelectionChange(true, region));
         rebuildSelection();
-        message("message.aliyastoolkit.copy_paste_region_added", union.size());
+        message("message.aliyastoolkit.copy_paste_region_added", selectionPositions.size());
         return true;
     }
 
@@ -744,29 +754,34 @@ public final class CopyPasteClient {
             message("message.aliyastoolkit.copy_paste_too_big", CopyPaste.MAX_VOLUME);
             return false;
         }
-        REMOVAL_REGIONS.add(region);
+        SELECTION_CHANGES.add(new SelectionChange(false, region));
         rebuildSelection();
         return true;
     }
 
     private static void rebuildSelection() {
         Set<BlockPos> union = new LinkedHashSet<>();
-        for (Region region : REGIONS) {
-            region.collectInto(union);
-        }
-        for (Region removal : REMOVAL_REGIONS) {
-            union.removeIf(removal::contains);
+        for (SelectionChange change : SELECTION_CHANGES) {
+            if (change.add()) {
+                change.region().collectInto(union);
+            } else {
+                union.removeIf(change.region()::contains);
+            }
         }
         selectionPositions = List.copyOf(union);
         selectionOutline = union.isEmpty() ? List.of() : ChainMining.collectOutlineEdges(union);
     }
 
     /**
-     * Ctrl + 右键：把当前选区收进主手的蓝图箱。
+     * 记录当前选区：
+     * <ul>
+     * <li>{@code cut = true}（Ctrl + 左键）：把材料收进主手的蓝图箱，并让服务端清除源方块；</li>
+     * <li>{@code cut = false}（Ctrl + 右键）：只记录蓝图，不拿取源方块和材料。</li>
+     * </ul>
      * 箱子必须没有物品；可以已经存有蓝图（会被新蓝图覆盖）。
      * 容量不够时只提示，不退出绘制模式。
      */
-    private static void recordSelection(Minecraft minecraft) {
+    private static void recordSelection(Minecraft minecraft, boolean cut) {
         LocalPlayer player = minecraft.player;
         if (player == null || minecraft.level == null) {
             return;
@@ -798,11 +813,11 @@ public final class CopyPasteClient {
             return;
         }
 
-        BlueprintCreatePayload payload = BlueprintCreatePayload.of(true, positions);
+        BlueprintCreatePayload payload = BlueprintCreatePayload.of(cut, positions);
         boolean collectFluids = ToolkitSettingsCache.get().collectFluids();
         BlueprintCapture.Result result = BlueprintCapture.capture(minecraft.level, payload.min(),
                 payload.offsets(), player, collectFluids);
-        if (collectFluids && result.blueprint() != null
+        if (cut && collectFluids && result.blueprint() != null
                 && result.blueprint().fluidSourceCount() > countEmptyBuckets(player)) {
             result = BlueprintCapture.capture(minecraft.level, payload.min(), payload.offsets(), player, false);
         }
@@ -1160,7 +1175,18 @@ public final class CopyPasteClient {
         boolean removing = pendingPoint == null && pendingRemovalPoint != null;
         BlockPos base = pendingPoint != null ? pendingPoint : pendingRemovalPoint;
         if (base == null) {
-            clearPreview();
+            // 第一次选点之前也显示跟随准星的目标轮廓，方便确认当前处于蓝图绘制模式。
+            BlockPos target = pickTarget(minecraft);
+            if (target == null) {
+                clearPreview();
+                return;
+            }
+            previewTarget = target;
+            previewKind = PreviewKind.SELECTION_FOLLOW;
+            previewPositions = List.of(target);
+            previewStates = List.of(minecraft.level.getBlockState(target));
+            previewOutline = ChainMining.collectOutlineEdges(List.of(target));
+            previewInvalid = false;
             return;
         }
         BlockPos target = pickTarget(minecraft);
@@ -1261,7 +1287,7 @@ public final class CopyPasteClient {
         // 蓝图虚影：低透明度，但保留方块贴图，便于观察实际效果
         if (mode == Mode.PLACING && !previewPositions.isEmpty()) {
             renderGhostBlocks(poseStack, buffers, previewPositions, previewStates,
-                    1.0F, 1.0F, 1.0F, previewInvalid ? 0.20F : 0.35F);
+                    1.0F, 1.0F, 1.0F, previewInvalid ? 0.24F : 0.40F);
         }
         // 选区还没确定第二点时，用更淡的虚影实时预览范围：扩选偏浅黄，缩选偏浅红。
         if (mode == Mode.SELECTING && pendingPoint != null && !previewPositions.isEmpty()) {
@@ -1280,14 +1306,17 @@ public final class CopyPasteClient {
         }
         // 已确定的选区始终是黄色；动态预览颜色优先级更高，覆盖在黄色之上。
         float behindRed = previewInvalid ? INVALID_BEHIND_RED
+                : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_BEHIND_RED
                 : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_BEHIND_RED
                 : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_BEHIND_RED
                 : PREVIEW_BEHIND_RED;
         float behindGreen = previewInvalid ? INVALID_BEHIND_GREEN
+                : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_BEHIND_GREEN
                 : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_BEHIND_GREEN
                 : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_BEHIND_GREEN
                 : PREVIEW_BEHIND_GREEN;
         float behindBlue = previewInvalid ? INVALID_BEHIND_BLUE
+                : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_BEHIND_BLUE
                 : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_BEHIND_BLUE
                 : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_BEHIND_BLUE
                 : PREVIEW_BEHIND_BLUE;
@@ -1302,14 +1331,17 @@ public final class CopyPasteClient {
             renderEdge(poseStack, front, edge, SELECTION_RED, SELECTION_GREEN, SELECTION_BLUE);
         }
         float frontRed = previewInvalid ? INVALID_RED
+                : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_RED
                 : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_RED
                 : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_RED
                 : PREVIEW_RED;
         float frontGreen = previewInvalid ? INVALID_GREEN
+                : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_GREEN
                 : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_GREEN
                 : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_GREEN
                 : PREVIEW_GREEN;
         float frontBlue = previewInvalid ? INVALID_BLUE
+                : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_BLUE
                 : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_BLUE
                 : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_BLUE
                 : PREVIEW_BLUE;

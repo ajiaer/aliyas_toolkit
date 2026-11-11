@@ -29,17 +29,17 @@
 | Java | **21** |
 | Environment | **Client + server** |
 | Tested on | Vanilla-only: Minecraft 1.21.1 + NeoForge, single player / integrated server |
-| Version | **1.21.1-1.0.1** |
+| Version | **1.21.1-1.1.1** |
 
 ## Feature summary
 
 1. **Hotbar row swap** (`X`): exchange the hotbar with a chosen inventory row without opening the inventory. Swapping does not trigger auto-refill.
 2. **Automatic refill**: whitelisted hotbar items are moved back from the inventory when they disappear. Optional exact item/component matching; durability is ignored.
 3. **Chain mining** (`Z` toggle): break connected identical blocks, with a configurable chain limit and a massive-block preset (cross-section + layers + direction). Drops are collected and merged at the origin.
-4. **Quick build** (`C` toggle): mark two points, choose operation / dimension / shape / fill, and build with the block in your main hand. Up to 4096 blocks, 40-block reach, server validation.
-5. **Blueprint build**: hold any blueprint box and press `Ctrl + right click`. An empty blueprint enters draw mode; an existing blueprint enters build mode. Draw with right/left clicks, snap points to block faces with `Shift`, record with `Ctrl + right click`, preview with a ghost, pin/unpin with right/left click, and build with `Ctrl + right click`.
+4. **Quick build** (`C` toggle): a green target outline follows your crosshair before the first point; mark two points, choose operation / dimension / shape / fill, and build with the block in your main hand. Up to 4096 blocks, 40-block reach, server validation.
+5. **Blueprint build**: hold any blueprint box and press `Ctrl + right click`. An empty blueprint enters draw mode; an existing blueprint enters build mode. The entry prompt names the current mode as **Blueprint Build: Draw Mode** or **Blueprint Build: Build Mode**, and the target outline follows your crosshair before the first point. Draw with right/left clicks, snap points to block faces with `Shift`, press `Ctrl + left click` to record and collect materials (cut), or `Ctrl + right click` to record the blueprint only (copy). Preview with a ghost, pin/unpin with right/left click, and build with `Ctrl + right click`.
 6. **Blueprint boxes**: 7 tiers from 27 to 162 slots, vanilla chest model and lid animation, 5×9 scrollable screen, ghost placeholders, material checking, hopper/comparator support, and per-tier fire/explosion/void protection.
-7. **Auto Collect Fluids** (default ON): bucketable fluid sources are recorded and collected into filled buckets if enough empty buckets are available; otherwise a message is shown and fluids are skipped without cancelling the blueprint.
+7. **Auto Collect Fluids** (default ON): in cut mode, bucketable fluid sources are recorded and collected into filled buckets if enough empty buckets are available; otherwise a message is shown and fluids are skipped without cancelling the blueprint. In copy mode, fluid sources are recorded without consuming buckets or adding filled buckets.
 8. **Per-player settings**: open with `Alt + X`; all values are saved with player data and survive death / respawn.
 
 ## Default keys
@@ -53,12 +53,13 @@
 | Toggle quick build | Tap `C` (applies on release) |
 | Cycle quick-build preset | Hold `C` and scroll |
 | Open the blueprint box in your main hand | `Alt + right click` |
-| Blueprint build: enter / record / build | `Ctrl + right click` |
+| Blueprint draw: record and collect (cut) | `Ctrl + left click` |
+| Blueprint build: enter / record copy / build | `Ctrl + right click` |
 | Blueprint build: switch draw / build mode | `Tab` (box must have no items) |
 | Blueprint draw: snap to block face | Hold `Shift` |
 | Blueprint build: rotate ghost | `V` (before pinning) |
 | Blueprint build: pin / unpin | Right click / left click |
-| Blueprint build: exit | `` ` `` |
+| Exit chain mining / quick build / blueprint build | `` ` `` |
 | Blueprint build: change ghost distance | Scroll |
 
 All keys only work in-game and can be rebound in **Options → Controls → Key Binds → Aliya's Toolkit**.
@@ -75,12 +76,12 @@ gradlew.bat build
 ./gradlew build
 ```
 
-- Output: `build/libs/aliyastoolkit-1.21.1-1.0.1.jar`
+- Output: `build/libs/aliyastoolkit-1.21.1-1.1.1.jar`
 - Development client: `gradlew runClient`
 - Development server: `gradlew runServer`
 - Data generation: `gradlew runData`
 
-Version format: **`<Minecraft version>-<mod version>`**, e.g. `1.21.1-1.0.1`.
+Version format: **`<Minecraft version>-<mod version>`**, e.g. `1.21.1-1.1.1`.
 
 ## Disclosure
 
@@ -122,11 +123,11 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 | Java | **21** |
 | 安装位置 | **客户端 + 服务端**（设计上需要双端安装） |
 | 测试条件 | **仅原版环境**：Minecraft 1.21.1 + NeoForge，单人游戏 / 内置服务器 |
-| 当前版本 | **1.21.1-1.0.1** |
+| 当前版本 | **1.21.1-1.1.1** |
 
 - 模组 id：`aliyastoolkit`
 - 命名空间：`aliyastoolkit:`
-- 构建产物：`build/libs/aliyastoolkit-1.21.1-1.0.1.jar`
+- 构建产物：`build/libs/aliyastoolkit-1.21.1-1.1.1.jar`
 
 ## 快速开始
 
@@ -146,12 +147,13 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 | 快速建造开关 | 短按 `C`（松开时生效） |
 | 切换快速建造预设 | 按住 `C` 滚动滚轮 |
 | 打开主手蓝图箱界面 | `Alt + 右键` |
-| 蓝图建造：进入 / 记录 / 建造 | `Ctrl + 右键` |
+| 蓝图绘制：记录并收取（剪切） | `Ctrl + 左键` |
+| 蓝图建造：进入 / 记录复制 / 建造 | `Ctrl + 右键` |
 | 蓝图建造：切换绘制 / 建造模式 | `Tab`（箱子必须没有物品） |
 | 蓝图绘制：吸附方块外侧面 | 按住 `Shift` |
 | 蓝图建造：旋转虚影 | `V`（固定之前） |
 | 蓝图建造：固定 / 解除固定 | 右键 / 左键 |
-| 蓝图建造：退出 | `` ` `` |
+| 退出连锁破坏 / 快速建造 / 蓝图建造 | `` ` `` |
 | 蓝图建造：调整虚影距离 | 滚轮 |
 
 所有按键只在游戏内生效（打开任意界面时不会触发）。
@@ -184,6 +186,7 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 ### 4. 快速建造
 
 - 短按 `C`（可改键）切换快速建造（松开时生效）；按住 `C` 滚动滚轮切换建造预设。
+- 开启后、第一次选点前，目标格会跟随准星显示绿色轮廓，便于确认快速建造已经开启。
 - 与连锁破坏、蓝图建造互斥。
 - 右键第一次确定起点，显示绿色规划轮廓、辅助线，以及所需方块数量 / 背包已有数量。
 - 右键第二次确定终点：检查主手可放置方块和数量（生存模式优先消耗背包，再快捷栏；创造模式不检查也不消耗），足够则立刻建造。
@@ -198,16 +201,20 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 - 手持任意等级的蓝图箱，按 `Ctrl + 右键`（可改键）进入蓝图建造。
 - **没有蓝图**：自动进入**模式 1 · 绘制**。
 - **已有蓝图**：进入**模式 2 · 建造**。
+- 进入后原有提示会显示当前模式：**蓝图建造：绘制模式** 或 **蓝图建造：建造模式**。
 - 模式 2 下如果蓝图箱**没有物品**，可以按 `Tab`（可改键）切回绘制模式；之后记录的蓝图会覆盖当前蓝图。
 - 蓝图箱里**有物品**时只能处于建造模式，无法切换，除非先清空物品或蓝图。
 
 #### 模式 1 · 绘制
 
 - 右键两个位置**扩选**，动态预览为**浅黄色**，已确定选区为**橙色**。
+- 进入绘制模式后、第一次选点前，目标格会跟随准星显示淡黄色轮廓，便于确认当前模式已开启。
 - 左键两个位置**缩选**，动态预览为**浅红色**；浅黄 / 浅红都优先于橙色显示。
+- 之后右键扩选可以重新覆盖之前删除的区域；选区按操作顺序生效。
 - 可多次叠加、多次删除。
 - 按住吸附键（默认 `Shift`，可改键）时，选点会吸附到指向方块的外侧面，和快速建造的选点规则一致。
-- 按 `Ctrl + 右键` 任意位置记录蓝图：客户端/服务端重新读取结构，把方块物品、容器内容和流体桶收进蓝图箱，并退出蓝图建造。
+- 按 `Ctrl + 左键` 任意位置记录蓝图并收取材料：客户端/服务端重新读取结构，把方块物品、容器内容和流体桶收进蓝图箱，并清除源方块，相当于剪切。
+- 按 `Ctrl + 右键` 任意位置只记录蓝图（复制）：源方块保持不变，也不向蓝图箱放入材料；两种方式都会退出蓝图建造。
 - 绘制/记录时会**过滤蓝图箱**（方块和容器里的蓝图箱物品都不会被收集），并提示跳过数量。
 - 选区里如果有箱子等容器，容器内容会作为材料需求记录；剪切时先清空并移除方块实体，**不会额外爆一份内容物**。
 
@@ -219,6 +226,7 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 - 固定后按 `Ctrl + 右键` 检查材料并建造：
   - 材料足够：扣除蓝图箱里的方块物品、容器内容和流体桶，按虚影位置建造；
   - 材料不足：提示并退出蓝图建造。
+- 虚影透明度略微提高，只绘制玩家可见的方块面；蓝图轮廓线仍然正常显示。
 - 玩家与虚影的碰撞**只在刚放出虚影时检测一次**，之后不会再把虚影从玩家身边推开，方便一眼看到完整结构。
 - 寻找合法放置位置的范围为指示器周围半径 **8 格**的球；找不到位置时不在预览阶段反复提示。
 - 箱子、潜影盒、床等 `ENTITYBLOCK_ANIMATED` 方块在虚影中使用真实 BlockState 渲染；相邻方块隐藏面会剔除，实体方块先写深度再半透明绘制。
@@ -226,9 +234,10 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 #### 自动收集流体
 
 - 默认开启，可在 `Alt + X → 蓝图建造` 页面切换。
-- 开启时，记录蓝图会识别可用桶接取的流体源头（水、岩浆等），检查背包 / 快捷栏 / 副手的空桶数量：
+- 开启时，**剪切模式**（`Ctrl + 左键`）记录蓝图会识别可用桶接取的流体源头（水、岩浆等），检查背包 / 快捷栏 / 副手的空桶数量：
   - 足够：消耗空桶，把对应装满的桶作为材料放入蓝图箱；
   - 不足：提示并跳过流体源头，但仍创建其它方块的蓝图，不取消记录。
+- **复制模式**（`Ctrl + 右键`）只把流体源头记录进蓝图，不消耗空桶，也不放入装满的桶；之后建造时需要自行准备。
 - 关闭时保持旧行为：流体源头不参与蓝图。
 
 ### 6. 蓝图箱
@@ -302,12 +311,12 @@ gradlew.bat build
 ./gradlew build
 ```
 
-- 产物：`build/libs/aliyastoolkit-1.21.1-1.0.1.jar`
+- 产物：`build/libs/aliyastoolkit-1.21.1-1.1.1.jar`
 - 开发客户端：`gradlew runClient`
 - 开发服务端：`gradlew runServer`
 - 数据生成：`gradlew runData`
 
-版本号规则：**`<Minecraft 版本>-<模组版本>`**，例如 `1.21.1-1.0.1`，方便后续适配更多 Minecraft 版本时一眼区分。
+版本号规则：**`<Minecraft 版本>-<模组版本>`**，例如 `1.21.1-1.1.1`。
 
 ### 10. 制作说明与测试范围
 

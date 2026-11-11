@@ -19,6 +19,7 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
 import net.minecraft.network.ConnectionProtocol;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
@@ -136,7 +137,8 @@ public class AliyasToolkitClient {
 
     /**
      * 蓝图建造主按键：手持蓝图箱时 Ctrl + 右键进入蓝图建造；
-     * 绘制模式下记录蓝图并退出；建造模式下（固定虚影后）检查材料并建造。
+     * 绘制模式下只记录蓝图并退出（复制），不拿取源方块和材料；
+     * 建造模式下（固定虚影后）检查材料并建造。
      */
     public static final KeyMapping BLUEPRINT_BUILD_KEY = new OrderedKeyMapping(
             "key." + AliyasToolkit.MODID + ".blueprint_build",
@@ -146,13 +148,25 @@ public class AliyasToolkitClient {
             GLFW.GLFW_MOUSE_BUTTON_RIGHT,
             KEY_CATEGORY, 5);
 
+    /**
+     * 蓝图绘制：记录结构并把材料收进蓝图箱，同时清除源方块（剪切）。
+     * 默认 Ctrl + 左键。
+     */
+    public static final KeyMapping BLUEPRINT_CUT_KEY = new OrderedKeyMapping(
+            "key." + AliyasToolkit.MODID + ".blueprint_cut",
+            KeyConflictContext.IN_GAME,
+            KeyModifier.CONTROL,
+            InputConstants.Type.MOUSE,
+            GLFW.GLFW_MOUSE_BUTTON_LEFT,
+            KEY_CATEGORY, 6);
+
     /** 蓝图建造：在没有物品的蓝图箱上切换绘制 / 建造模式。 */
     public static final KeyMapping BLUEPRINT_MODE_KEY = new OrderedKeyMapping(
             "key." + AliyasToolkit.MODID + ".blueprint_mode",
             KeyConflictContext.IN_GAME,
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_TAB,
-            KEY_CATEGORY, 6);
+            KEY_CATEGORY, 7);
 
     /** 蓝图建造：旋转建造虚影。 */
     public static final KeyMapping BLUEPRINT_ROTATE_KEY = new OrderedKeyMapping(
@@ -160,7 +174,7 @@ public class AliyasToolkitClient {
             KeyConflictContext.IN_GAME,
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_V,
-            KEY_CATEGORY, 8);
+            KEY_CATEGORY, 9);
 
     /** 蓝图绘制：按住时把选点吸附到指向方块的外侧（快速建造选点位置）。 */
     public static final KeyMapping BLUEPRINT_SNAP_KEY = new OrderedKeyMapping(
@@ -168,15 +182,18 @@ public class AliyasToolkitClient {
             KeyConflictContext.IN_GAME,
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_LEFT_SHIFT,
-            KEY_CATEGORY, 7);
+            KEY_CATEGORY, 8);
 
-    /** 蓝图建造：退出当前模式。 */
-    public static final KeyMapping BLUEPRINT_EXIT_KEY = new OrderedKeyMapping(
+    /**
+     * 退出当前工具模式：连锁破坏、快速建造、蓝图建造都可以用这个键退出。
+     * 默认 `（反引号），可改键。
+     */
+    public static final KeyMapping TOOLKIT_EXIT_KEY = new OrderedKeyMapping(
             "key." + AliyasToolkit.MODID + ".blueprint_exit",
             KeyConflictContext.IN_GAME,
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_GRAVE_ACCENT,
-            KEY_CATEGORY, 9);
+            KEY_CATEGORY, 10);
 
     public AliyasToolkitClient(IEventBus modEventBus, ModContainer container) {
         // 互斥模式：连锁破坏、快速建造、剪切复制同一时间最多开启一个
@@ -206,10 +223,11 @@ public class AliyasToolkitClient {
         event.register(QUICK_BUILD_KEY);
         event.register(BLUEPRINT_OPEN_BOX_KEY);
         event.register(BLUEPRINT_BUILD_KEY);
+        event.register(BLUEPRINT_CUT_KEY);
         event.register(BLUEPRINT_MODE_KEY);
         event.register(BLUEPRINT_SNAP_KEY);
         event.register(BLUEPRINT_ROTATE_KEY);
-        event.register(BLUEPRINT_EXIT_KEY);
+        event.register(TOOLKIT_EXIT_KEY);
     }
 
     private static void onRegisterMenuScreens(RegisterMenuScreensEvent event) {
@@ -230,7 +248,7 @@ public class AliyasToolkitClient {
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
         AliyasToolkit.LOGGER.info(
-                "Aliya's Toolkit client setup complete (swap: X, chain mining: Z, quick build: C, blueprint: Ctrl+RMB / Alt+RMB, toolkit screen: Alt+X)");
+                "Aliya's Toolkit client setup complete (swap: X, chain mining: Z, quick build: C, blueprint: Ctrl+LMB cut / Ctrl+RMB copy or build / Alt+RMB, exit modes: backtick, toolkit screen: Alt+X)");
     }
 
     /**
@@ -242,6 +260,29 @@ public class AliyasToolkitClient {
     @SubscribeEvent
     static void onClientTick(ClientTickEvent.Post event) {
         Minecraft minecraft = Minecraft.getInstance();
+
+        while (TOOLKIT_EXIT_KEY.consumeClick()) {
+            if (minecraft.screen != null || minecraft.player == null) {
+                continue;
+            }
+            boolean chainActive = ChainMiningClient.isActive();
+            boolean buildEnabled = QuickBuildClient.isEnabled();
+            boolean blueprintActive = CopyPasteClient.isActive();
+            if (!chainActive && !buildEnabled && !blueprintActive) {
+                continue;
+            }
+            if (chainActive) {
+                ChainMiningClient.forceDisable();
+            }
+            if (buildEnabled) {
+                QuickBuildClient.forceDisable();
+            }
+            if (blueprintActive) {
+                CopyPasteClient.forceDisable();
+            }
+            minecraft.player.displayClientMessage(
+                    Component.translatable("message.aliyastoolkit.mode_exit"), true);
+        }
 
         while (OPEN_TOOLKIT_KEY.consumeClick()) {
             tryOpenToolkit(minecraft);
