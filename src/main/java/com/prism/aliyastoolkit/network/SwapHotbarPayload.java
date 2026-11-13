@@ -13,9 +13,10 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
- * 客户端 -> 服务端：请求把快捷栏和背包里设置好的那一行（“交换行”）互换。
+ * 客户端 -> 服务端：请求执行快捷栏切换。
  * <p>
- * 这个包不带任何数据（具体哪一行由服务端保存的玩家设置决定），所以用 {@link StreamCodec#unit(Object)} 作为编解码器。
+ * 这个包不带任何数据（具体使用指定行还是循环、以及方向和行号，由服务端保存的玩家设置决定），
+ * 所以用 {@link StreamCodec#unit(Object)} 作为编解码器。
  */
 public record SwapHotbarPayload() implements CustomPacketPayload {
     /** 单例，发送时直接用这一个实例即可。 */
@@ -44,7 +45,12 @@ public record SwapHotbarPayload() implements CustomPacketPayload {
             }
             if (context.player() instanceof ServerPlayer player) {
                 ToolkitSettings settings = player.getData(AliyasToolkit.SETTINGS);
-                HotbarSwapper.swapHotbarWithRow(player, settings.swapRow());
+                if (settings.swapMode() == ToolkitSettings.SwapMode.CYCLE) {
+                    HotbarSwapper.cycleRows(player,
+                            settings.cycleDirection() == ToolkitSettings.CycleDirection.REVERSE);
+                } else {
+                    HotbarSwapper.swapHotbarWithRow(player, settings.swapRow());
+                }
             }
         });
     }

@@ -3,6 +3,8 @@ package com.prism.aliyastoolkit.client;
 import java.util.List;
 import java.util.OptionalDouble;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -68,20 +70,10 @@ public final class ChainMiningClient {
     private static final RenderType CHAIN_OUTLINE_BEHIND = createOutlineType(
             "aliyastoolkit_chain_outline_behind", RenderStateShard.NO_DEPTH_TEST, 2.0D);
 
-    /**
-     * 可以直接看到的部分的描边：正常深度测试，被方块挡住的部分不会画到（后画，盖住上面那一层）。
-     */
-    private static final RenderType CHAIN_OUTLINE_FRONT = createOutlineType(
-            "aliyastoolkit_chain_outline_front", RenderStateShard.LEQUAL_DEPTH_TEST, 2.0D);
-
-    /**
-     * 准星指向的那个方块专用的框：纯白、更粗，会替换原版的黑框。
-     */
-    private static final RenderType CHAIN_OUTLINE_TARGET = createOutlineType(
-            "aliyastoolkit_chain_outline_target", RenderStateShard.LEQUAL_DEPTH_TEST, 5.0D);
-
-    /** 指向方块框向外扩一点，避免和方块表面完全重合。 */
-    private static final double TARGET_BOX_INFLATE = 0.002D;
+    /** 准星实时跟随方块的粗框宽度。 */
+    private static final float TARGET_LINE_WIDTH = 0.020F;
+    /** 连锁区域“视线可见前缘”的轮廓宽度，比目标框略细。 */
+    private static final float VISIBLE_OUTLINE_WIDTH = 0.010F;
 
     private static RenderType createOutlineType(String name, RenderStateShard.DepthTestStateShard depthTest,
             double lineWidth) {
@@ -373,38 +365,51 @@ public final class ChainMiningClient {
             return;
         }
 
-        Minecraft minecraft = Minecraft.getInstance();
         Vec3 camera = event.getCamera().getPosition();
         PoseStack poseStack = event.getPoseStack();
-        MultiBufferSource.BufferSource buffers = minecraft.renderBuffers().bufferSource();
 
-        poseStack.pushPose();
-        poseStack.translate(-camera.x, -camera.y, -camera.z);
+        // Iris 会把 renderBuffers().bufferSource() 替换为延迟绘制的
+        // FullyBufferedMultiBufferSource；轮廓线必须在自己的渲染阶段立即绘制，
+        // 否则真正绘制时全局颜色/深度状态可能已经被其它渲染阶段改变。
+        try (ByteBufferBuilder lineBuffer = new ByteBufferBuilder(1536)) {
+            MultiBufferSource.BufferSource buffers = MultiBufferSource.immediate(lineBuffer);
 
-        // 先画“被方块挡住”的暗色描边：关掉深度测试，所以隔着方块也能看到
-        VertexConsumer behind = buffers.getBuffer(CHAIN_OUTLINE_BEHIND);
-        for (ChainMining.OutlineEdge edge : preview) {
-            renderEdge(poseStack, behind, edge, BEHIND_RED, BEHIND_GREEN, BEHIND_BLUE);
+            // 其他模组可能在自己的渲染阶段改过 ColorModulator 后没有复位；
+            // 线条颜色会再乘一次该值，导致看起来整体很暗。画线前强制恢复白色。
+            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+
+            poseStack.pushPose();
+            poseStack.translate(-camera.x, -camera.y, -camera.z);
+
+            // 先画“被方块挡住”的暗色描边：关掉深度测试，所以隔着方块也能看到
+            VertexConsumer behind = buffers.getBuffer(CHAIN_OUTLINE_BEHIND);
+            for (ChainMining.OutlineEdge edge : preview) {
+                renderEdge(poseStack, behind, edge, BEHIND_RED, BEHIND_GREEN, BEHIND_BLUE);
+            }
+            buffers.endBatch(CHAIN_OUTLINE_BEHIND);
+
+            // 再画“直接能看到”的白色描边：正常深度测试，被挡住的像素不会覆盖，
+            // 于是可见部分保持白色，被遮挡部分保留上面那层暗色。
+            // 可见前缘使用 Create 强力胶式 cuboid 粗线。
+            VertexConsumer front = buffers.getBuffer(ThickOutlineRenderer.type());
+            for (ChainMining.OutlineEdge edge : preview) {
+                ThickOutlineRenderer.renderEdge(poseStack, front, edge.start(), edge.axis(),
+                        VISIBLE_OUTLINE_WIDTH, 1.0F, 1.0F, 1.0F, 1.0F);
+            }
+            buffers.endBatch(ThickOutlineRenderer.type());
+
+            // 指向的方块：纯白、有实际宽度的一圈框（原版黑框已在 RenderHighlightEvent 里取消）。
+            // 和 Create 强力胶一样，用 QUADS 生成 cuboid 边条，避免 GL 线宽被驱动限制。
+            if (targetPos != null) {
+                VertexConsumer target = buffers.getBuffer(ThickOutlineRenderer.type());
+                ThickOutlineRenderer.renderBox(poseStack, target,
+                        new AABB(targetPos).inflate(ThickOutlineRenderer.BOX_INFLATE),
+                        TARGET_LINE_WIDTH, 1.0F, 1.0F, 1.0F, 1.0F);
+                buffers.endBatch(ThickOutlineRenderer.type());
+            }
+
+            poseStack.popPose();
         }
-        buffers.endBatch(CHAIN_OUTLINE_BEHIND);
-
-        // 再画“直接能看到”的白色描边：正常深度测试，被挡住的像素不会覆盖，
-        // 于是可见部分保持白色，被遮挡部分保留上面那层暗色。
-        VertexConsumer front = buffers.getBuffer(CHAIN_OUTLINE_FRONT);
-        for (ChainMining.OutlineEdge edge : preview) {
-            renderEdge(poseStack, front, edge, 1.0F, 1.0F, 1.0F);
-        }
-        buffers.endBatch(CHAIN_OUTLINE_FRONT);
-
-        // 指向的方块：纯白、更粗的一圈框（原版黑框已在 RenderHighlightEvent 里取消）
-        if (targetPos != null) {
-            VertexConsumer target = buffers.getBuffer(CHAIN_OUTLINE_TARGET);
-            LevelRenderer.renderLineBox(poseStack, target, new AABB(targetPos).inflate(TARGET_BOX_INFLATE),
-                    1.0F, 1.0F, 1.0F, 1.0F);
-            buffers.endBatch(CHAIN_OUTLINE_TARGET);
-        }
-
-        poseStack.popPose();
     }
 
     /**
@@ -443,6 +448,119 @@ public final class ChainMiningClient {
         consumer.addVertex(pose, x2, y2, z2).setColor(red, green, blue, 1.0F)
                 .setNormal(pose, normalX, normalY, normalZ);
     }
+
+    /**
+     * 用 12 根有实际宽度的立方体边条画一个方块框。
+     * 这是 Create 强力胶使用的思路：不依赖 GL 线宽，而是直接生成 QUADS 几何。
+     */
+    private static void renderThickBox(PoseStack poseStack, VertexConsumer consumer, AABB box,
+            float width, float red, float green, float blue, float alpha) {
+        float half = width / 2.0F;
+
+        // 沿 X 的四条边
+        renderBeam(poseStack, consumer, box.minX, box.minY, box.minZ, box.maxX, box.minY, box.minZ,
+                half, red, green, blue, alpha);
+        renderBeam(poseStack, consumer, box.minX, box.minY, box.maxZ, box.maxX, box.minY, box.maxZ,
+                half, red, green, blue, alpha);
+        renderBeam(poseStack, consumer, box.minX, box.maxY, box.minZ, box.maxX, box.maxY, box.minZ,
+                half, red, green, blue, alpha);
+        renderBeam(poseStack, consumer, box.minX, box.maxY, box.maxZ, box.maxX, box.maxY, box.maxZ,
+                half, red, green, blue, alpha);
+
+        // 沿 Y 的四条边
+        renderBeam(poseStack, consumer, box.minX, box.minY, box.minZ, box.minX, box.maxY, box.minZ,
+                half, red, green, blue, alpha);
+        renderBeam(poseStack, consumer, box.maxX, box.minY, box.minZ, box.maxX, box.maxY, box.minZ,
+                half, red, green, blue, alpha);
+        renderBeam(poseStack, consumer, box.minX, box.minY, box.maxZ, box.minX, box.maxY, box.maxZ,
+                half, red, green, blue, alpha);
+        renderBeam(poseStack, consumer, box.maxX, box.minY, box.maxZ, box.maxX, box.maxY, box.maxZ,
+                half, red, green, blue, alpha);
+
+        // 沿 Z 的四条边
+        renderBeam(poseStack, consumer, box.minX, box.minY, box.minZ, box.minX, box.minY, box.maxZ,
+                half, red, green, blue, alpha);
+        renderBeam(poseStack, consumer, box.maxX, box.minY, box.minZ, box.maxX, box.minY, box.maxZ,
+                half, red, green, blue, alpha);
+        renderBeam(poseStack, consumer, box.minX, box.maxY, box.minZ, box.minX, box.maxY, box.maxZ,
+                half, red, green, blue, alpha);
+        renderBeam(poseStack, consumer, box.maxX, box.maxY, box.minZ, box.maxX, box.maxY, box.maxZ,
+                half, red, green, blue, alpha);
+    }
+
+    /** 画一根沿 X/Y/Z 轴的方形截面边条（不依赖 GL 线宽）。 */
+    private static void renderBeam(PoseStack poseStack, VertexConsumer consumer,
+            double x1, double y1, double z1, double x2, double y2, double z2,
+            float half, float red, float green, float blue, float alpha) {
+        double x0;
+        double x3;
+        double y0;
+        double y3;
+        double z0;
+        double z3;
+        if (x1 != x2) {
+            x0 = Math.min(x1, x2);
+            x3 = Math.max(x1, x2);
+            y0 = y1 - half;
+            y3 = y1 + half;
+            z0 = z1 - half;
+            z3 = z1 + half;
+        } else if (y1 != y2) {
+            x0 = x1 - half;
+            x3 = x1 + half;
+            y0 = Math.min(y1, y2);
+            y3 = Math.max(y1, y2);
+            z0 = z1 - half;
+            z3 = z1 + half;
+        } else {
+            x0 = x1 - half;
+            x3 = x1 + half;
+            y0 = y1 - half;
+            y3 = y1 + half;
+            z0 = Math.min(z1, z2);
+            z3 = Math.max(z1, z2);
+        }
+        renderCuboid(poseStack, consumer, x0, y0, z0, x3, y3, z3, red, green, blue, alpha);
+    }
+
+    /** 画一个轴对齐立方体的六个面；边条端盖也会一起生成。 */
+    private static void renderCuboid(PoseStack poseStack, VertexConsumer consumer,
+            double x0, double y0, double z0, double x1, double y1, double z1,
+            float red, float green, float blue, float alpha) {
+        PoseStack.Pose pose = poseStack.last();
+        addBeamQuad(pose, consumer, x0, y0, z0, x1, y0, z0, x1, y0, z1, x0, y0, z1,
+                0.0F, -1.0F, 0.0F, red, green, blue, alpha);
+        addBeamQuad(pose, consumer, x0, y1, z0, x0, y1, z1, x1, y1, z1, x1, y1, z0,
+                0.0F, 1.0F, 0.0F, red, green, blue, alpha);
+        addBeamQuad(pose, consumer, x0, y0, z0, x0, y1, z0, x1, y1, z0, x1, y0, z0,
+                0.0F, 0.0F, -1.0F, red, green, blue, alpha);
+        addBeamQuad(pose, consumer, x0, y0, z1, x1, y0, z1, x1, y1, z1, x0, y1, z1,
+                0.0F, 0.0F, 1.0F, red, green, blue, alpha);
+        addBeamQuad(pose, consumer, x0, y0, z0, x0, y0, z1, x0, y1, z1, x0, y1, z0,
+                -1.0F, 0.0F, 0.0F, red, green, blue, alpha);
+        addBeamQuad(pose, consumer, x1, y0, z0, x1, y1, z0, x1, y1, z1, x1, y0, z1,
+                1.0F, 0.0F, 0.0F, red, green, blue, alpha);
+    }
+
+    private static void addBeamQuad(PoseStack.Pose pose, VertexConsumer consumer,
+            double x1, double y1, double z1, double x2, double y2, double z2,
+            double x3, double y3, double z3, double x4, double y4, double z4,
+            float normalX, float normalY, float normalZ,
+            float red, float green, float blue, float alpha) {
+        addBeamVertex(pose, consumer, x1, y1, z1, normalX, normalY, normalZ, red, green, blue, alpha);
+        addBeamVertex(pose, consumer, x2, y2, z2, normalX, normalY, normalZ, red, green, blue, alpha);
+        addBeamVertex(pose, consumer, x3, y3, z3, normalX, normalY, normalZ, red, green, blue, alpha);
+        addBeamVertex(pose, consumer, x4, y4, z4, normalX, normalY, normalZ, red, green, blue, alpha);
+    }
+
+    private static void addBeamVertex(PoseStack.Pose pose, VertexConsumer consumer,
+            double x, double y, double z, float normalX, float normalY, float normalZ,
+            float red, float green, float blue, float alpha) {
+        consumer.addVertex(pose, (float) x, (float) y, (float) z)
+                .setColor(red, green, blue, alpha)
+                .setNormal(pose, normalX, normalY, normalZ);
+    }
+
 
     @SubscribeEvent
     static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {

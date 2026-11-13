@@ -3,6 +3,8 @@ package com.prism.aliyastoolkit.client;
 import java.util.List;
 import java.util.OptionalDouble;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -38,6 +40,7 @@ import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -78,6 +81,10 @@ public final class QuickBuildClient {
     private static final float HELPER_RED = 0.25F;
     private static final float HELPER_GREEN = 0.65F;
     private static final float HELPER_BLUE = 0.30F;
+    /** 准星实时跟随方块的粗框宽度。 */
+    private static final float TARGET_PREVIEW_WIDTH = 0.020F;
+    /** 正在操作的规划范围预览轮廓宽度。 */
+    private static final float PLAN_OUTLINE_WIDTH = 0.020F;
 
     private static final RenderType OUTLINE_BEHIND = createLineType(
             "aliyastoolkit_build_outline_behind", RenderStateShard.NO_DEPTH_TEST, 2.0D);
@@ -565,43 +572,64 @@ public final class QuickBuildClient {
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_BLOCK_ENTITIES) {
             return;
         }
-        if (outline.isEmpty()) {
+        if (outline.isEmpty() && rawTarget == null) {
             return;
         }
 
-        Minecraft minecraft = Minecraft.getInstance();
         Vec3 camera = event.getCamera().getPosition();
         PoseStack poseStack = event.getPoseStack();
-        MultiBufferSource.BufferSource buffers = minecraft.renderBuffers().bufferSource();
 
-        poseStack.pushPose();
-        poseStack.translate(-camera.x, -camera.y, -camera.z);
+        // Iris 会把 renderBuffers().bufferSource() 替换为延迟绘制的
+        // FullyBufferedMultiBufferSource；轮廓线必须在自己的渲染阶段立即绘制，
+        // 否则真正绘制时全局颜色/深度状态可能已经被其它渲染阶段改变。
+        try (ByteBufferBuilder lineBuffer = new ByteBufferBuilder(1536)) {
+            MultiBufferSource.BufferSource buffers = MultiBufferSource.immediate(lineBuffer);
 
-        // 先画被方块挡住的暗绿描边（关深度测试，隔着方块也能看到）
-        VertexConsumer behind = buffers.getBuffer(OUTLINE_BEHIND);
-        for (ChainMining.OutlineEdge edge : outline) {
-            renderEdge(poseStack, behind, edge, BEHIND_RED, BEHIND_GREEN, BEHIND_BLUE);
+            // 其他模组可能在自己的渲染阶段改过 ColorModulator 后没有复位；
+            // 线条颜色会再乘一次该值，导致看起来整体很暗。画线前强制恢复白色。
+            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+
+            poseStack.pushPose();
+            poseStack.translate(-camera.x, -camera.y, -camera.z);
+
+            // 先画被方块挡住的暗绿描边（关深度测试，隔着方块也能看到）
+            VertexConsumer behind = buffers.getBuffer(OUTLINE_BEHIND);
+            for (ChainMining.OutlineEdge edge : outline) {
+                renderEdge(poseStack, behind, edge, BEHIND_RED, BEHIND_GREEN, BEHIND_BLUE);
+            }
+            buffers.endBatch(OUTLINE_BEHIND);
+
+            // 再画直接可见的亮绿描边（正常深度测试，被挡住的像素不会覆盖）。
+            // 正在操作的规划范围预览使用 Create 强力胶式 cuboid 粗线。
+            VertexConsumer front = buffers.getBuffer(ThickOutlineRenderer.type());
+            for (ChainMining.OutlineEdge edge : outline) {
+                ThickOutlineRenderer.renderEdge(poseStack, front, edge.start(), edge.axis(),
+                        PLAN_OUTLINE_WIDTH, FRONT_RED, FRONT_GREEN, FRONT_BLUE, 1.0F);
+            }
+            buffers.endBatch(ThickOutlineRenderer.type());
+
+            // 准星实时跟随的目标方块：使用有实际宽度的 cuboid 粗框。
+            // 选了第一个点后、第二个点确定前不显示跟随框。
+            if (firstPoint == null && rawTarget != null) {
+                VertexConsumer target = buffers.getBuffer(ThickOutlineRenderer.type());
+                ThickOutlineRenderer.renderBox(poseStack, target,
+                        new AABB(rawTarget).inflate(ThickOutlineRenderer.BOX_INFLATE),
+                        TARGET_PREVIEW_WIDTH, FRONT_RED, FRONT_GREEN, FRONT_BLUE, 1.0F);
+                buffers.endBatch(ThickOutlineRenderer.type());
+            }
+
+            // 第二个点确定前只显示规划范围轮廓；不再单独绘制第一个点的粗框。
+
+            // 指示器位置到实际规划位置之间的辅助线
+            if (rawTarget != null && plannedPoint != null && !rawTarget.equals(plannedPoint)) {
+                VertexConsumer helper = buffers.getBuffer(HELPER_LINE);
+                renderLine(poseStack, helper, Vec3.atCenterOf(rawTarget), Vec3.atCenterOf(plannedPoint),
+                        HELPER_RED, HELPER_GREEN, HELPER_BLUE);
+                buffers.endBatch(HELPER_LINE);
+            }
+
+            poseStack.popPose();
         }
-        buffers.endBatch(OUTLINE_BEHIND);
-
-        // 再画直接可见的亮绿描边（正常深度测试，被挡住的像素不会覆盖）
-        VertexConsumer front = buffers.getBuffer(OUTLINE_FRONT);
-        for (ChainMining.OutlineEdge edge : outline) {
-            renderEdge(poseStack, front, edge, FRONT_RED, FRONT_GREEN, FRONT_BLUE);
-        }
-        buffers.endBatch(OUTLINE_FRONT);
-
-        // 第二个点确定前只显示规划范围轮廓；不再单独绘制第一个点的粗框。
-
-        // 指示器位置到实际规划位置之间的辅助线
-        if (rawTarget != null && plannedPoint != null && !rawTarget.equals(plannedPoint)) {
-            VertexConsumer helper = buffers.getBuffer(HELPER_LINE);
-            renderLine(poseStack, helper, Vec3.atCenterOf(rawTarget), Vec3.atCenterOf(plannedPoint),
-                    HELPER_RED, HELPER_GREEN, HELPER_BLUE);
-            buffers.endBatch(HELPER_LINE);
-        }
-
-        poseStack.popPose();
     }
 
     private static void renderEdge(PoseStack poseStack, VertexConsumer consumer, ChainMining.OutlineEdge edge,

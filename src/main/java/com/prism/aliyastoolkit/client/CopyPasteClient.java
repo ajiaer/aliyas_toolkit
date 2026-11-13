@@ -10,6 +10,7 @@ import java.util.OptionalDouble;
 import java.util.Set;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -77,8 +78,8 @@ import org.lwjgl.opengl.GL11;
  * <ul>
  * <li>手持蓝图箱，按 Ctrl + 右键（默认，可改键）进入蓝图建造。没有蓝图进入绘制模式，
  * 有蓝图进入建造模式。</li>
- * <li>绘制模式：第一次选点前显示跟随准星的目标轮廓；右键两次新增选区（浅橙色动态预览），
- * 左键两次删除选区（浅红色动态预览），已确定选区为黄色；Ctrl + 左键记录蓝图并收取材料（剪切），
+ * <li>绘制模式：第一次选点前显示跟随准星的目标轮廓；右键两次新增选区（浅黄色动态预览），
+ * 左键两次删除选区（浅红色动态预览），已确定选区为浅蓝色；Ctrl + 左键记录蓝图并收取材料（剪切），
  * Ctrl + 右键只记录蓝图（复制），两者都会退出绘制模式。</li>
  * <li>建造模式：显示虚影，右键固定、左键解除固定，滚轮调整距离，V 旋转；
  * 固定后 Ctrl + 右键检查材料并建造（不足会提示并退出）。</li>
@@ -88,14 +89,14 @@ import org.lwjgl.opengl.GL11;
  */
 @EventBusSubscriber(modid = AliyasToolkit.MODID, value = Dist.CLIENT)
 public final class CopyPasteClient {
-    /** 已确定的选区轮廓：橙色。 */
-    private static final float SELECTION_RED = 1.0F;
-    private static final float SELECTION_GREEN = 0.60F;
-    private static final float SELECTION_BLUE = 0.12F;
-    /** 选区轮廓：被方块挡住部分的暗橙色。 */
-    private static final float SELECTION_BEHIND_RED = 0.55F;
-    private static final float SELECTION_BEHIND_GREEN = 0.30F;
-    private static final float SELECTION_BEHIND_BLUE = 0.05F;
+    /** 已确定的选区轮廓：浅蓝色。 */
+    private static final float SELECTION_RED = 0.45F;
+    private static final float SELECTION_GREEN = 0.78F;
+    private static final float SELECTION_BLUE = 1.0F;
+    /** 选区轮廓：被方块挡住部分的暗蓝色。 */
+    private static final float SELECTION_BEHIND_RED = 0.18F;
+    private static final float SELECTION_BEHIND_GREEN = 0.34F;
+    private static final float SELECTION_BEHIND_BLUE = 0.55F;
     /** 正在动态预览的新增选区：浅黄色。 */
     private static final float PENDING_ADD_RED = 1.0F;
     private static final float PENDING_ADD_GREEN = 0.95F;
@@ -110,13 +111,19 @@ public final class CopyPasteClient {
     private static final float PENDING_REMOVE_BEHIND_RED = 0.55F;
     private static final float PENDING_REMOVE_BEHIND_GREEN = 0.28F;
     private static final float PENDING_REMOVE_BEHIND_BLUE = 0.28F;
-    /** 预览轮廓：蓝色。 */
+    /** 建造模式虚影轮廓（材料足够、可以建造）：绿色。 */
     private static final float PREVIEW_RED = 0.35F;
-    private static final float PREVIEW_GREEN = 0.65F;
-    private static final float PREVIEW_BLUE = 1.0F;
-    private static final float PREVIEW_BEHIND_RED = 0.10F;
-    private static final float PREVIEW_BEHIND_GREEN = 0.24F;
-    private static final float PREVIEW_BEHIND_BLUE = 0.50F;
+    private static final float PREVIEW_GREEN = 0.95F;
+    private static final float PREVIEW_BLUE = 0.45F;
+    private static final float PREVIEW_BEHIND_RED = 0.14F;
+    private static final float PREVIEW_BEHIND_GREEN = 0.40F;
+    private static final float PREVIEW_BEHIND_BLUE = 0.18F;
+    /** 准星实时跟随目标方块的粗框宽度。 */
+    private static final float TARGET_PREVIEW_WIDTH = 0.020F;
+    /** 已确定选区可见前缘的粗轮廓宽度。 */
+    private static final float VISIBLE_OUTLINE_WIDTH = 0.010F;
+    /** 正在操作的选区预览轮廓宽度。 */
+    private static final float PREVIEW_OUTLINE_WIDTH = 0.020F;
     /** 预览无效（材料不足 / 范围过大 / 超出距离）。 */
     private static final float INVALID_RED = 1.0F;
     private static final float INVALID_GREEN = 0.35F;
@@ -130,8 +137,9 @@ public final class CopyPasteClient {
 
     /** 虚影距离限制（玩家眼睛到中心底部）。 */
     private static final double MIN_GHOST_DISTANCE = 2.0D;
-    private static final double MAX_GHOST_DISTANCE = 20.0D;
-    private static final double DEFAULT_GHOST_DISTANCE = 8.0D;
+    private static final double MAX_GHOST_DISTANCE = 32.0D;
+    /** 进入建造模式时的默认距离：视线前方 4 格。 */
+    private static final double DEFAULT_GHOST_DISTANCE = 4.0D;
     /** 自动避开玩家后额外增加的距离。 */
     private static final double SAFE_DISTANCE_PADDING = 2.0D;
 
@@ -160,7 +168,7 @@ public final class CopyPasteClient {
                     .setDepthTestState(RenderStateShard.LEQUAL_DEPTH_TEST)
                     .setLayeringState(RenderStateShard.VIEW_OFFSET_Z_LAYERING)
                     .setCullState(RenderStateShard.CULL)
-                    .setWriteMaskState(RenderStateShard.COLOR_WRITE)
+                    .setWriteMaskState(RenderStateShard.COLOR_DEPTH_WRITE)
                     .createCompositeState(false));
 
     private static Object lastLevel;
@@ -983,7 +991,7 @@ public final class CopyPasteClient {
     }
 
     /**
-     * 初始距离 8 格；如果结构 AABB 会碰到玩家，就逐步推远到刚好碰不到，再额外加 2 格。
+     * 初始距离 4 格；如果结构 AABB 会碰到玩家，就逐步推远到刚好碰不到，再额外加 2 格。
      * 玩家用滚轮主动靠近时也会再次执行，避免虚影穿进玩家身体。
      */
     private static void ensureSafeDistance(Minecraft minecraft) {
@@ -1273,82 +1281,112 @@ public final class CopyPasteClient {
         if (mode == Mode.NONE || minecraft.level == null) {
             return;
         }
-        if (selectionOutline.isEmpty() && previewOutline.isEmpty()) {
+        if (selectionOutline.isEmpty() && previewOutline.isEmpty() && previewTarget == null) {
             return;
         }
 
         Vec3 camera = event.getCamera().getPosition();
         PoseStack poseStack = event.getPoseStack();
-        MultiBufferSource.BufferSource buffers = minecraft.renderBuffers().bufferSource();
 
         poseStack.pushPose();
         poseStack.translate(-camera.x, -camera.y, -camera.z);
 
-        // 蓝图虚影：低透明度，但保留方块贴图，便于观察实际效果
-        if (mode == Mode.PLACING && !previewPositions.isEmpty()) {
-            renderGhostBlocks(poseStack, buffers, previewPositions, previewStates,
-                    1.0F, 1.0F, 1.0F, previewInvalid ? 0.24F : 0.40F);
-        }
-        // 选区还没确定第二点时，用更淡的虚影实时预览范围：扩选偏浅黄，缩选偏浅红。
-        if (mode == Mode.SELECTING && pendingPoint != null && !previewPositions.isEmpty()) {
-            renderGhostBlocks(poseStack, buffers, previewPositions, previewStates,
-                    1.0F, 0.98F, 0.82F, 0.22F);
-        } else if (mode == Mode.SELECTING && pendingRemovalPoint != null && !previewPositions.isEmpty()) {
-            renderGhostBlocks(poseStack, buffers, previewPositions, previewStates,
-                    1.0F, 0.82F, 0.82F, 0.22F);
+        // 蓝图虚影同样不能使用 Iris 的延迟 bufferSource，否则颜色/光照状态
+        // 可能在真正 flush 时已经改变。
+        try (ByteBufferBuilder ghostBuffer = new ByteBufferBuilder(4096)) {
+            MultiBufferSource.BufferSource ghostBuffers = MultiBufferSource.immediate(ghostBuffer);
+
+            // 蓝图虚影：参考 Create 蓝图预览，使用满亮方块模型。
+            // 保留原始贴图/颜色和现有轮廓线，不叠加表面色。
+            if (mode == Mode.PLACING && !previewPositions.isEmpty()) {
+                renderGhostBlocks(poseStack, ghostBuffers, previewPositions, previewStates,
+                        1.0F, 1.0F, 1.0F, 1.0F, true);
+            }
+            // 绘制模式的选区范围只显示轮廓，不再复制区域方块虚影。
+            // 这样和 Create 强力胶一致，也不会让 Iris 对整片虚影重新做一次光照/后处理。
         }
 
-        // 先画被方块挡住部分的暗色描边
-        VertexConsumer behind = buffers.getBuffer(OUTLINE_BEHIND);
-        for (ChainMining.OutlineEdge edge : selectionOutline) {
-            renderEdge(poseStack, behind, edge,
-                    SELECTION_BEHIND_RED, SELECTION_BEHIND_GREEN, SELECTION_BEHIND_BLUE);
-        }
-        // 已确定的选区始终是黄色；动态预览颜色优先级更高，覆盖在黄色之上。
-        float behindRed = previewInvalid ? INVALID_BEHIND_RED
-                : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_BEHIND_RED
-                : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_BEHIND_RED
-                : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_BEHIND_RED
-                : PREVIEW_BEHIND_RED;
-        float behindGreen = previewInvalid ? INVALID_BEHIND_GREEN
-                : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_BEHIND_GREEN
-                : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_BEHIND_GREEN
-                : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_BEHIND_GREEN
-                : PREVIEW_BEHIND_GREEN;
-        float behindBlue = previewInvalid ? INVALID_BEHIND_BLUE
-                : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_BEHIND_BLUE
-                : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_BEHIND_BLUE
-                : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_BEHIND_BLUE
-                : PREVIEW_BEHIND_BLUE;
-        for (ChainMining.OutlineEdge edge : previewOutline) {
-            renderEdge(poseStack, behind, edge, behindRed, behindGreen, behindBlue);
-        }
-        buffers.endBatch(OUTLINE_BEHIND);
+        // 其他模组可能在自己的渲染阶段改过 ColorModulator 后没有复位；
+        // 线条颜色会再乘一次该值，导致看起来整体很暗。画线前强制恢复白色。
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
 
-        // 再画直接可见的亮色描边
-        VertexConsumer front = buffers.getBuffer(OUTLINE_FRONT);
-        for (ChainMining.OutlineEdge edge : selectionOutline) {
-            renderEdge(poseStack, front, edge, SELECTION_RED, SELECTION_GREEN, SELECTION_BLUE);
+        // Iris 会把 renderBuffers().bufferSource() 替换为延迟绘制的
+        // FullyBufferedMultiBufferSource；轮廓线必须在自己的渲染阶段立即绘制，
+        // 否则真正绘制时全局颜色/深度状态可能已经被其它渲染阶段改变。
+        try (ByteBufferBuilder lineBuffer = new ByteBufferBuilder(1536)) {
+            MultiBufferSource.BufferSource lineBuffers = MultiBufferSource.immediate(lineBuffer);
+
+            // 先画被方块挡住部分的暗色描边
+            VertexConsumer behind = lineBuffers.getBuffer(OUTLINE_BEHIND);
+            for (ChainMining.OutlineEdge edge : selectionOutline) {
+                renderEdge(poseStack, behind, edge,
+                        SELECTION_BEHIND_RED, SELECTION_BEHIND_GREEN, SELECTION_BEHIND_BLUE);
+            }
+            // 已确定的选区始终是浅蓝色；动态预览颜色优先级更高，覆盖在浅蓝色之上。
+            float behindRed = previewInvalid ? INVALID_BEHIND_RED
+                    : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_BEHIND_RED
+                    : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_BEHIND_RED
+                    : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_BEHIND_RED
+                    : PREVIEW_BEHIND_RED;
+            float behindGreen = previewInvalid ? INVALID_BEHIND_GREEN
+                    : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_BEHIND_GREEN
+                    : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_BEHIND_GREEN
+                    : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_BEHIND_GREEN
+                    : PREVIEW_BEHIND_GREEN;
+            float behindBlue = previewInvalid ? INVALID_BEHIND_BLUE
+                    : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_BEHIND_BLUE
+                    : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_BEHIND_BLUE
+                    : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_BEHIND_BLUE
+                    : PREVIEW_BEHIND_BLUE;
+            for (ChainMining.OutlineEdge edge : previewOutline) {
+                renderEdge(poseStack, behind, edge, behindRed, behindGreen, behindBlue);
+            }
+            lineBuffers.endBatch(OUTLINE_BEHIND);
+
+            // 再画直接可见的亮色描边；可见前缘使用 Create 强力胶式 cuboid 粗线。
+            VertexConsumer front = lineBuffers.getBuffer(ThickOutlineRenderer.type());
+            for (ChainMining.OutlineEdge edge : selectionOutline) {
+                ThickOutlineRenderer.renderEdge(poseStack, front, edge.start(), edge.axis(),
+                        VISIBLE_OUTLINE_WIDTH, SELECTION_RED, SELECTION_GREEN, SELECTION_BLUE, 1.0F);
+            }
+            float frontRed = previewInvalid ? INVALID_RED
+                    : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_RED
+                    : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_RED
+                    : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_RED
+                    : PREVIEW_RED;
+            float frontGreen = previewInvalid ? INVALID_GREEN
+                    : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_GREEN
+                    : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_GREEN
+                    : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_GREEN
+                    : PREVIEW_GREEN;
+            float frontBlue = previewInvalid ? INVALID_BLUE
+                    : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_BLUE
+                    : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_BLUE
+                    : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_BLUE
+                    : PREVIEW_BLUE;
+            for (ChainMining.OutlineEdge edge : previewOutline) {
+                ThickOutlineRenderer.renderEdge(poseStack, front, edge.start(), edge.axis(),
+                        PREVIEW_OUTLINE_WIDTH, frontRed, frontGreen, frontBlue, 1.0F);
+            }
+            lineBuffers.endBatch(ThickOutlineRenderer.type());
+
+            // 准星实时跟随的目标方块：比选区前缘轮廓略粗。
+            // 选了第一个点后、第二个点确定前不显示跟随框。
+            if (mode == Mode.SELECTING && previewTarget != null
+                    && pendingPoint == null && pendingRemovalPoint == null) {
+                float targetRed = previewInvalid ? INVALID_RED
+                        : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_RED : PENDING_ADD_RED;
+                float targetGreen = previewInvalid ? INVALID_GREEN
+                        : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_GREEN : PENDING_ADD_GREEN;
+                float targetBlue = previewInvalid ? INVALID_BLUE
+                        : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_BLUE : PENDING_ADD_BLUE;
+                VertexConsumer target = lineBuffers.getBuffer(ThickOutlineRenderer.type());
+                ThickOutlineRenderer.renderBox(poseStack, target,
+                        new AABB(previewTarget).inflate(ThickOutlineRenderer.BOX_INFLATE),
+                        TARGET_PREVIEW_WIDTH, targetRed, targetGreen, targetBlue, 1.0F);
+                lineBuffers.endBatch(ThickOutlineRenderer.type());
+            }
         }
-        float frontRed = previewInvalid ? INVALID_RED
-                : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_RED
-                : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_RED
-                : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_RED
-                : PREVIEW_RED;
-        float frontGreen = previewInvalid ? INVALID_GREEN
-                : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_GREEN
-                : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_GREEN
-                : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_GREEN
-                : PREVIEW_GREEN;
-        float frontBlue = previewInvalid ? INVALID_BLUE
-                : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_BLUE
-                : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_BLUE
-                : previewKind == PreviewKind.SELECTION_REMOVE ? PENDING_REMOVE_BLUE
-                : PREVIEW_BLUE;
-        for (ChainMining.OutlineEdge edge : previewOutline) {
-            renderEdge(poseStack, front, edge, frontRed, frontGreen, frontBlue);
-        }
-        buffers.endBatch(OUTLINE_FRONT);
 
         poseStack.popPose();
     }
@@ -1359,7 +1397,7 @@ public final class CopyPasteClient {
      */
     private static void renderGhostBlocks(PoseStack poseStack, MultiBufferSource.BufferSource buffers,
             List<BlockPos> positions, List<BlockState> states,
-            float red, float green, float blue, float alpha) {
+            float red, float green, float blue, float alpha, boolean fullBright) {
         if (positions.isEmpty() || positions.size() != states.size() || positions.size() > GHOST_RENDER_LIMIT) {
             return;
         }
@@ -1371,11 +1409,12 @@ public final class CopyPasteClient {
         for (int i = 0; i < positions.size(); i++) {
             previewMap.put(positions.get(i), states.get(i));
         }
-        GhostPreviewLevel ghostLevel = new GhostPreviewLevel(level, previewMap);
+        GhostPreviewLevel ghostLevel = new GhostPreviewLevel(level, previewMap, fullBright);
 
         BlockRenderDispatcher dispatcher = Minecraft.getInstance().getBlockRenderer();
         boolean hasEntityBlock = states.stream()
                 .anyMatch(state -> state.getRenderShape() == RenderShape.ENTITYBLOCK_ANIMATED);
+
         if (hasEntityBlock) {
             // 箱子等 ENTITYBLOCK_ANIMATED 虚影先写一遍深度，再半透明绘制：
             // 被前表面挡住的箱内纹理/背面不会透出来。
@@ -1409,39 +1448,42 @@ public final class CopyPasteClient {
 
         MultiBufferSource ghostEntityBuffers = renderType -> buffers.getBuffer(GhostRenderTypes.translucent(renderType));
         RenderSystem.setShaderColor(red, green, blue, alpha);
-        for (int i = 0; i < positions.size(); i++) {
-            BlockState state = states.get(i);
-            if (state.getRenderShape() == RenderShape.INVISIBLE) {
-                continue;
-            }
-            BlockPos pos = positions.get(i);
-            poseStack.pushPose();
-            poseStack.translate(pos.getX(), pos.getY(), pos.getZ());
-            if (state.getRenderShape() == RenderShape.MODEL) {
-                // checkSides=true 会让 ModelBlockRenderer 用 GhostPreviewLevel 检查邻居，
-                // 自动剔除两个相邻虚影方块之间的隐藏面。
-                dispatcher.renderBatched(state, pos, ghostLevel, poseStack, buffers.getBuffer(GHOST_BLOCK),
-                        true, RandomSource.create(state.getSeed(pos)), ModelData.EMPTY, GHOST_BLOCK);
-            } else {
-                // ENTITYBLOCK_ANIMATED（箱子、潜影盒、床、旗帜、头颅等）
-                // 优先用带真实 BlockState 的方块实体渲染器，保证朝向/床半等状态正确；
-                // 没有渲染器时回退到 BlockRenderDispatcher 的 BEWLR 路径。
-                boolean rendered = state.getRenderShape() == RenderShape.ENTITYBLOCK_ANIMATED
-                        && renderEntityBlockModel(state, pos, poseStack, ghostEntityBuffers);
-                if (!rendered) {
-                    dispatcher.renderSingleBlock(state, poseStack, ghostEntityBuffers,
-                            LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, ModelData.EMPTY, GHOST_BLOCK);
+        try {
+            for (int i = 0; i < positions.size(); i++) {
+                BlockState state = states.get(i);
+                if (state.getRenderShape() == RenderShape.INVISIBLE) {
+                    continue;
                 }
+                BlockPos pos = positions.get(i);
+                poseStack.pushPose();
+                poseStack.translate(pos.getX(), pos.getY(), pos.getZ());
+                if (state.getRenderShape() == RenderShape.MODEL) {
+                    // 使用 GhostPreviewLevel 的真实光照，并按相邻虚影方块剔除隐藏面，
+                    // 避免 renderSingleBlock 画出内部面造成光栅纹/闪烁。
+                    dispatcher.renderBatched(state, pos, ghostLevel, poseStack, buffers.getBuffer(GHOST_BLOCK),
+                            true, RandomSource.create(state.getSeed(pos)), ModelData.EMPTY, GHOST_BLOCK);
+                } else {
+                    // ENTITYBLOCK_ANIMATED（箱子、潜影盒、床、旗帜、头颅等）
+                    // 优先用带真实 BlockState 的方块实体渲染器，保证朝向/床半等状态正确；
+                    // 没有渲染器时回退到 BlockRenderDispatcher 的 BEWLR 路径。
+                    boolean rendered = state.getRenderShape() == RenderShape.ENTITYBLOCK_ANIMATED
+                            && renderEntityBlockModel(state, pos, poseStack, ghostEntityBuffers);
+                    if (!rendered) {
+                        dispatcher.renderSingleBlock(state, poseStack, ghostEntityBuffers,
+                                LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, ModelData.EMPTY, GHOST_BLOCK);
+                    }
+                }
+                poseStack.popPose();
             }
-            poseStack.popPose();
+            // 先 flush 所有缓冲（MODEL 用 GHOST_BLOCK；ENTITYBLOCK_ANIMATED 用 BEWLR 自己的实体渲染类型），
+            // 再恢复颜色，否则实体方块可能在颜色恢复后才真正绘制，失去虚影透明度。
+            buffers.endBatch(GHOST_BLOCK);
+            buffers.endBatch();
+        } finally {
+            RenderSystem.depthMask(true);
+            RenderSystem.enableDepthTest();
+            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
         }
-        // 先 flush 所有缓冲（MODEL 用 GHOST_BLOCK；ENTITYBLOCK_ANIMATED 用 BEWLR 自己的实体渲染类型），
-        // 再恢复颜色，否则实体方块可能在颜色恢复后才真正绘制，失去虚影透明度。
-        buffers.endBatch(GHOST_BLOCK);
-        buffers.endBatch();
-        RenderSystem.depthMask(true);
-        RenderSystem.enableDepthTest();
-        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
     /**

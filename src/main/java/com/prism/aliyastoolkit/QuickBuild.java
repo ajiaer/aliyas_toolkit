@@ -27,7 +27,7 @@ public final class QuickBuild {
     /** 一次最多建造多少个方块。 */
     public static final int MAX_VOLUME = 4096;
     /** 建造点离玩家的最大距离。 */
-    public static final double MAX_DISTANCE = 40.0D;
+    public static final double MAX_DISTANCE = 64.0D;
 
     private QuickBuild() {
     }

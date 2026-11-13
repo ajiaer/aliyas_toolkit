@@ -36,15 +36,20 @@ All keys work only while you are in-game and can be changed in **Options → Con
 
 ## Hotbar and inventory
 
-### Swap the hotbar with an inventory row
+### Hotbar switching
 
-Press **X** to exchange the nine hotbar slots with a chosen row of your inventory. The default row is the bottom inventory row, and you can choose another row in the settings screen. You do not need to open the inventory, and the swap does not trigger automatic refill.
+Press **X** to switch the hotbar in one of two modes:
+
+- **Specific Row** (default): swap the nine hotbar slots with a chosen inventory row (1 = top, 3 = bottom).
+- **Cycle**: rotate all three inventory rows and the hotbar. Forward: row 1 → row 2 → row 3 → hotbar → row 1; Reverse is the opposite order.
+
+You do not need to open the inventory. Switching does not trigger automatic refill.
 
 ### Automatic refill
 
 When a whitelisted item disappears from your hotbar — because it was used up, dropped, or a tool broke — the mod moves a matching stack from your inventory back into the same hotbar slot.
 
-- The whitelist has nine slots. Open **Alt + X → Automatic Refill**, left-click with an item to add it, or right-click to clear a slot.
+- The whitelist has nine slots. Open **Alt + X → Automatic Refill**, left-click with an item to add it, or right-click to clear a slot. Hovering a slot shows the item tooltip.
 - **Exact Match** can require the same item type and the same item data, such as enchantments and custom names. Durability is always ignored, so a new pickaxe can replace a broken one.
 - Refill only works while you are playing and no inventory, container, or chat screen is open.
 
@@ -68,7 +73,7 @@ Tap **C** to toggle quick build. The toggle is applied when you release the key.
 
 Quick build supports point-to-point and center-to-point placement, one-, two-, and three-dimensional shapes, and line, rectangle, circle, and sphere shapes. Each can be solid, hollow, or a frame.
 
-A single build can place up to **4096 blocks**, and the target can be up to **40 blocks** away. The shape is checked again when the build starts, so an invalid target simply does not build.
+A single build can place up to **4096 blocks**, and the target can be up to **64 blocks** away. The shape is checked again when the build starts, so an invalid target simply does not build.
 
 ## Blueprint build
 
@@ -86,7 +91,7 @@ Hold a blueprint box in your main hand and press **Ctrl + right-click**.
 
 Before the first point is selected, a pale-yellow target outline follows your crosshair so you can see that draw mode is active.
 
-- Right-click two positions to **expand** the selection. The current selection is orange, and the new preview is pale yellow.
+- Right-click two positions to **expand** the selection. The current selection is light blue, and the new preview is pale yellow.
 - Left-click two positions to **shrink** the selection. The preview is pale red.
 - A later right-click selection can add back an area that was previously removed; selections are applied in operation order.
 - You can add or remove several selections in a row.
@@ -105,7 +110,7 @@ Before the first point is selected, a pale-yellow target outline follows your cr
 - Right-click to pin the ghost in place so you can walk around and inspect it; left-click to unpin it.
 - While the ghost is pinned, press **Ctrl + right-click** to check materials and build.
 - If the materials are sufficient, the required blocks, container contents, and buckets are taken from the blueprint box and the structure is built. If not, a message is shown and blueprint mode exits.
-- The ghost is slightly easier to see and only draws visible block faces; the blueprint outline remains fully visible.
+- The ghost is slightly easier to see and only draws visible block faces; the blueprint outline remains fully visible. The outline is green when you have enough materials to build, and red when you do not.
 
 The ghost searches for a valid placement position within a radius of **8 blocks** around the indicator. Boxes, shulker boxes, beds, and other animated blocks are shown with their real appearance in the preview.
 
@@ -122,7 +127,7 @@ Turn the option off if you want fluid sources to be ignored completely.
 
 ## Blueprint boxes
 
-Blueprint boxes are chest-like storage blocks that hold a blueprint and the materials needed to build it. They come in seven tiers:
+Blueprint boxes are chest-like storage blocks that hold a blueprint and the materials needed to build it. They come in six tiers:
 
 | Blueprint box | Storage slots | How to obtain |
 | --- | --- | --- |
@@ -130,9 +135,8 @@ Blueprint boxes are chest-like storage blocks that hold a blueprint and the mate
 | Copper Blueprint Box | 45 (5×9) | Blueprint Box + 8 copper ingots |
 | Iron Blueprint Box | 63 (7×9) | Copper Blueprint Box + 8 iron ingots |
 | Gold Blueprint Box | 81 (9×9) | Iron Blueprint Box + 8 gold ingots |
-| Obsidian Blueprint Box | 108 (12×9) | Gold Blueprint Box + 8 obsidian |
-| Diamond Blueprint Box | 135 (15×9) | Obsidian Blueprint Box + 8 diamonds |
-| Netherite Blueprint Box | 162 (18×9) | Smithing Table: Diamond Blueprint Box + netherite ingot + netherite upgrade template |
+| Diamond Blueprint Box | 108 (12×9) | Gold Blueprint Box + 8 diamonds |
+| Netherite Blueprint Box | 144 (16×9) | Smithing Table: Diamond Blueprint Box + netherite ingot + netherite upgrade template |
 
 To open the blueprint box you are holding, press **Alt + right-click**. The same interface can be opened by right-clicking a placed blueprint box.
 
@@ -140,14 +144,14 @@ To open the blueprint box you are holding, press **Alt + right-click**. The same
 - An empty box shows disabled slots. After a blueprint is recorded, ghost placeholders show which items are needed and how many.
 - **Clear** returns the stored items and removes the blueprint. **Quick Take** moves the stored items to your inventory while keeping the blueprint. **Store All** moves matching items from your inventory into the box.
 - Blueprint boxes work with hoppers and comparators like a chest. They always stay single and cannot be placed inside another blueprint box.
-- All blueprint boxes float in water. Copper and higher tiers resist fire and lava; obsidian and higher tiers resist explosions; netherite drops also survive lava and are moved to a safe place if they fall into the void.
+- All blueprint boxes float in water. Copper and higher tiers resist fire and lava; diamond and higher tiers resist explosions; netherite drops also survive lava and are moved to a safe place if they fall into the void.
 - Renaming a blueprint box in an anvil keeps its contents and blueprint. Breaking a placed box keeps its items, blueprint, and stored contents.
 
 ## Settings and multiplayer
 
 Press **Alt + X** to open the settings screen. The five tabs are:
 
-- **Item Switching** — choose which inventory row is swapped with the hotbar.
+- **Item Switching** — choose Specific Row / Cycle, the inventory row for Specific Row mode, and the cycle direction.
 - **Automatic Refill** — turn Exact Match on or off and edit the nine-slot whitelist.
 - **Chain Mining** — set the chain limit, massive-block presets, direction lock, and whether other blocks may be broken.
 - **Quick Build** — choose, create, or delete presets and set the operation, dimension, shape, and fill.
@@ -162,7 +166,7 @@ For multiplayer, install the mod on **both the client and the server**. Each pla
 | Action | Default key |
 | --- | --- |
 | Open Aliya's Toolkit settings | **Alt + X** |
-| Swap hotbar with inventory row | **X** |
+| Switch hotbar (Specific Row / Cycle) | **X** |
 | Toggle chain mining | Tap **Z** |
 | Change massive-block preset | Hold **Z** and scroll |
 | Toggle quick build | Tap **C** |
@@ -234,15 +238,20 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 
 ## 快捷栏与背包
 
-### 快捷栏交换
+### 快捷栏切换
 
-按 **X**，把快捷栏的九个格子和指定的一行背包互换。默认交换最下面一行，可以在设置中改选其它行。交换不需要打开背包，也不会触发自动补充。
+按 **X** 切换快捷栏，支持两种模式：
+
+- **指定行**（默认）：把快捷栏九个格子和指定的一行背包互换（1 = 最上面一行，3 = 最后一行）。
+- **循环**：让背包三行和快捷栏按顺序轮换。正序为第一行 → 第二行 → 第三行 → 快捷栏 → 第一行；倒序方向相反。
+
+切换不需要打开背包，也不会触发自动补充。
 
 ### 自动补充
 
 白名单物品因为用光、丢弃或工具损坏而从快捷栏消失时，模组会把背包里的同类物品移回原来的快捷栏格。
 
-- 白名单共有九个格子。打开 **Alt + X → 自动补充**，左键拿起物品设置，右键清空。
+- 白名单共有九个格子。打开 **Alt + X → 自动补充**，左键拿起物品设置，右键清空。鼠标悬停在槽位上可以查看物品信息。
 - **完全一致** 开启后，要求物品类型、附魔、自定义名称等数据一致；耐久值始终不参与比较，所以坏掉的镐可以用新镐补上。
 - 打开背包、箱子或聊天等界面时不会触发自动补充。
 
@@ -266,7 +275,7 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 
 快速建造支持点到点、中心到点，一维、二维、三维，以及直线、矩形、圆形、球形等形状；每种形状可以选择实心、空心或框架。
 
-一次最多建造 **4096 个方块**，目标点最远 **40 格**。建造开始前会再次检查目标区域，位置不合法时不会强行建造。
+一次最多建造 **4096 个方块**，目标点最远 **64 格**。建造开始前会再次检查目标区域，位置不合法时不会强行建造。
 
 ## 蓝图建造
 
@@ -284,7 +293,7 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 
 第一次选点前，目标格会跟随准星显示淡黄色轮廓，便于确认当前处于绘制模式。
 
-- 右键两个位置**扩选**，已确定区域显示为橙色，新增预览显示为浅黄色。
+- 右键两个位置**扩选**，已确定区域显示为浅蓝色，新增预览显示为浅黄色。
 - 左键两个位置**缩选**，预览显示为浅红色。
 - 之后右键扩选可以重新覆盖之前删除的区域；选区按操作顺序生效。
 - 可以连续多次添加或删除选区。
@@ -303,7 +312,7 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 - 右键固定虚影，方便走近查看；左键解除固定。
 - 固定后按 **Ctrl + 右键** 检查材料并建造。
 - 材料足够时，会从蓝图箱扣除方块、容器内容和流体桶，然后开始建造；材料不足时会提示并退出蓝图模式。
-- 虚影透明度略微提高，只绘制玩家可见的方块面；蓝图轮廓线仍然正常显示。
+- 虚影透明度略微提高，只绘制玩家可见的方块面；蓝图轮廓线仍然正常显示：材料足够时可以建造，轮廓为绿色；材料不足时为红色。
 
 虚影会在指示器周围半径 **8 格**的范围内寻找合法位置。箱子、潜影盒、床等方块在预览中会显示真实外观。
 
@@ -320,7 +329,7 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 
 ## 蓝图箱
 
-蓝图箱是类似箱子的储物方块，用来保存蓝图和建造材料。共有七个等级：
+蓝图箱是类似箱子的储物方块，用来保存蓝图和建造材料。共有六个等级：
 
 | 蓝图箱 | 容量 | 获取方式 |
 | --- | --- | --- |
@@ -328,9 +337,8 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 | 铜制蓝图箱 | 45（5×9） | 蓝图箱 + 8 个铜锭 |
 | 铁制蓝图箱 | 63（7×9） | 铜制蓝图箱 + 8 个铁锭 |
 | 金制蓝图箱 | 81（9×9） | 铁制蓝图箱 + 8 个金锭 |
-| 黑曜石蓝图箱 | 108（12×9） | 金制蓝图箱 + 8 个黑曜石 |
-| 钻石蓝图箱 | 135（15×9） | 黑曜石蓝图箱 + 8 个钻石 |
-| 下界合金蓝图箱 | 162（18×9） | 锻造台：钻石蓝图箱 + 下界合金锭 + 下界合金升级模板 |
+| 钻石蓝图箱 | 108（12×9） | 金制蓝图箱 + 8 个钻石 |
+| 下界合金蓝图箱 | 144（16×9） | 锻造台：钻石蓝图箱 + 下界合金锭 + 下界合金升级模板 |
 
 主手拿着蓝图箱按 **Alt + 右键** 可以打开界面；右键放在世界里的蓝图箱也可以打开同样的界面。
 
@@ -338,14 +346,14 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 - 没有蓝图时槽位是禁用的；记录蓝图后会显示半透明占位和每格需要的数量。
 - **清空蓝图** 会把物品放回背包并移除蓝图；**一键取出** 会取出物品但保留蓝图；**一键存入** 会把背包中符合条件的物品放进箱子。
 - 蓝图箱可以像普通箱子一样配合漏斗和比较器使用；始终是单箱，不能放进另一个蓝图箱。
-- 所有蓝图箱在水中都会上浮。铜制及以上防火、防岩浆；黑曜石及以上防爆炸；下界合金掉落物还能在岩浆中保留，并从虚空回到附近安全位置。
+- 所有蓝图箱在水中都会上浮。铜制及以上防火、防岩浆；钻石及以上防爆炸；下界合金掉落物还能在岩浆中保留，并从虚空回到附近安全位置。
 - 铁砧改名会保留内容和蓝图；破坏已放置的蓝图箱也会保留物品、蓝图和容器内容。
 
 ## 设置与多人游戏
 
 按 **Alt + X** 打开设置界面，左侧有五个页面：
 
-- **物品切换**：选择与快捷栏交换的背包行。
+- **物品切换**：选择指定行 / 循环模式、指定行号以及循环方向。
 - **自动补充**：开关“完全一致”，编辑九格白名单。
 - **连锁破坏**：设置连锁数量、大量方块预设、方向锁定和是否允许其它方块。
 - **快速建造**：选择、新建或删除预设，设置操作、维度、形状和填充方式。
@@ -360,7 +368,7 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 | 操作 | 默认按键 |
 | --- | --- |
 | 打开 Aliya的工具包 设置 | **Alt + X** |
-| 快捷栏与背包行交换 | **X** |
+| 快捷栏切换（指定行 / 循环） | **X** |
 | 开关连锁破坏 | 短按 **Z** |
 | 切换大量方块预设 | 按住 **Z** 滚动滚轮 |
 | 开关快速建造 | 短按 **C** |

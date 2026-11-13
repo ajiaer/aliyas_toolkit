@@ -6,15 +6,18 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 
 /**
- * 快捷栏与背包某一行的交换逻辑。
+ * 快捷栏切换逻辑。
  * <p>
+ * 支持两种模式：
+ * <ul>
+ * <li>指定行：快捷栏与背包第 1-3 行中的一行互换；</li>
+ * <li>循环：背包第 1 行 → 第 2 行 → 第 3 行 → 快捷栏 → 第 1 行轮换，或反向轮换。</li>
+ * </ul>
  * 物品栏索引（{@link Inventory#items}，共 36 格）：
  * <ul>
  * <li>0-8：快捷栏</li>
  * <li>9-35：背包主体（9-17、18-26、27-35 三行）</li>
  * </ul>
- * 具体交换哪一行由玩家设置里的“交换行”决定（1 = 最上面一行，3 = 最后一行）。
- * <p>
  * 玩家物品栏由服务端权威管理，因此本类只允许在服务端调用；执行后必须把变化同步给客户端。
  */
 public final class HotbarSwapper {
@@ -36,6 +39,50 @@ public final class HotbarSwapper {
     /** 背包某一行的起始索引（row 1-3，超出范围会被夹到合法值）。 */
     public static int rowStart(int row) {
         return INVENTORY_START + (Mth.clamp(row, MIN_ROW, MAX_ROW) - 1) * ROW_SIZE;
+    }
+
+    /** 把快捷栏和背包三行按顺序轮换（循环模式）。 */
+    public static void cycleRows(ServerPlayer player, boolean reverse) {
+        if (player.isSpectator()) {
+            return;
+        }
+
+        Inventory inventory = player.getInventory();
+        ItemStack[] hotbar = copyRow(inventory, HOTBAR_START);
+        ItemStack[] row1 = copyRow(inventory, rowStart(1));
+        ItemStack[] row2 = copyRow(inventory, rowStart(2));
+        ItemStack[] row3 = copyRow(inventory, rowStart(3));
+
+        // 正序：背包第 1 行 → 第 2 行 → 第 3 行 → 快捷栏 → 第 1 行。
+        // 倒序：方向反过来。
+        if (reverse) {
+            writeRow(inventory, rowStart(1), row2);
+            writeRow(inventory, rowStart(2), row3);
+            writeRow(inventory, rowStart(3), hotbar);
+            writeRow(inventory, HOTBAR_START, row1);
+        } else {
+            writeRow(inventory, rowStart(2), row1);
+            writeRow(inventory, rowStart(3), row2);
+            writeRow(inventory, HOTBAR_START, row3);
+            writeRow(inventory, rowStart(1), hotbar);
+        }
+
+        inventory.setChanged();
+        InventorySync.sync(player);
+    }
+
+    private static ItemStack[] copyRow(Inventory inventory, int start) {
+        ItemStack[] stacks = new ItemStack[ROW_SIZE];
+        for (int i = 0; i < ROW_SIZE; i++) {
+            stacks[i] = inventory.getItem(start + i);
+        }
+        return stacks;
+    }
+
+    private static void writeRow(Inventory inventory, int start, ItemStack[] stacks) {
+        for (int i = 0; i < ROW_SIZE; i++) {
+            inventory.setItem(start + i, stacks[i]);
+        }
     }
 
     /**

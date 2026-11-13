@@ -23,7 +23,58 @@ import net.minecraft.util.Mth;
  */
 public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int swapRow,
         List<ChainPreset> presets, int selectedPreset, boolean allowBreakingOtherBlocks,
-        List<BuildPreset> buildPresets, int selectedBuildPreset, boolean collectFluids) {
+        List<BuildPreset> buildPresets, int selectedBuildPreset, boolean collectFluids,
+        SwapMode swapMode, CycleDirection cycleDirection) {
+    /** 物品切换模式：指定背包行，或让四行循环轮换。 */
+    public enum SwapMode {
+        SPECIFIC_ROW("gui.aliyastoolkit.swap_mode.specific_row"),
+        CYCLE("gui.aliyastoolkit.swap_mode.cycle");
+
+        private final String translationKey;
+
+        SwapMode(String translationKey) {
+            this.translationKey = translationKey;
+        }
+
+        public String translationKey() {
+            return this.translationKey;
+        }
+
+        public static SwapMode fromName(String name) {
+            for (SwapMode mode : values()) {
+                if (mode.name().equals(name)) {
+                    return mode;
+                }
+            }
+            return SPECIFIC_ROW;
+        }
+    }
+
+    /** 循环模式的方向。 */
+    public enum CycleDirection {
+        FORWARD("gui.aliyastoolkit.cycle_direction.forward"),
+        REVERSE("gui.aliyastoolkit.cycle_direction.reverse");
+
+        private final String translationKey;
+
+        CycleDirection(String translationKey) {
+            this.translationKey = translationKey;
+        }
+
+        public String translationKey() {
+            return this.translationKey;
+        }
+
+        public static CycleDirection fromName(String name) {
+            for (CycleDirection direction : values()) {
+                if (direction.name().equals(name)) {
+                    return direction;
+                }
+            }
+            return FORWARD;
+        }
+    }
+
     /** 连锁数量最小值。 */
     public static final int MIN_CHAIN_LIMIT = 1;
     /** 连锁数量最大值。 */
@@ -34,6 +85,9 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
     public static final int MIN_SWAP_ROW = 1;
     public static final int MAX_SWAP_ROW = 3;
     public static final int DEFAULT_SWAP_ROW = 3;
+    /** 物品切换默认使用“指定行”，并默认使用正序循环。 */
+    public static final SwapMode DEFAULT_SWAP_MODE = SwapMode.SPECIFIC_ROW;
+    public static final CycleDirection DEFAULT_CYCLE_DIRECTION = CycleDirection.FORWARD;
     /** 最多可以保存多少个预设（连锁破坏、快速建造各自）。 */
     public static final int MAX_PRESETS = 16;
     /** 预设名称的最大长度。 */
@@ -43,7 +97,8 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
 
     /** 新玩家的默认设置：物品完全一致、连锁 64 个、交换最后一行、各一个默认预设、允许破坏其它方块、自动收集流体。 */
     public static final ToolkitSettings DEFAULT = new ToolkitSettings(true, DEFAULT_CHAIN_LIMIT, DEFAULT_SWAP_ROW,
-            List.of(ChainPreset.DEFAULT), 0, true, List.of(BuildPreset.DEFAULT), 0, true);
+            List.of(ChainPreset.DEFAULT), 0, true, List.of(BuildPreset.DEFAULT), 0, true,
+            DEFAULT_SWAP_MODE, DEFAULT_CYCLE_DIRECTION);
 
     /** 存档用的编解码器（字段都带默认值，老的玩家数据也能读）。 */
     public static final Codec<ToolkitSettings> CODEC = RecordCodecBuilder.create(instance -> instance.group(
@@ -64,7 +119,13 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
                     Codec.INT.optionalFieldOf("selected_build_preset", 0)
                             .forGetter(ToolkitSettings::selectedBuildPreset),
                     Codec.BOOL.optionalFieldOf("collect_fluids", true)
-                            .forGetter(ToolkitSettings::collectFluids))
+                            .forGetter(ToolkitSettings::collectFluids),
+                    Codec.STRING.optionalFieldOf("swap_mode", DEFAULT_SWAP_MODE.name())
+                            .xmap(SwapMode::fromName, SwapMode::name)
+                            .forGetter(ToolkitSettings::swapMode),
+                    Codec.STRING.optionalFieldOf("swap_cycle_direction", DEFAULT_CYCLE_DIRECTION.name())
+                            .xmap(CycleDirection::fromName, CycleDirection::name)
+                            .forGetter(ToolkitSettings::cycleDirection))
             .apply(instance, ToolkitSettings::new));
 
     /** 网络同步用的编解码器（字段较多，手动编解码）。 */
@@ -85,6 +146,8 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
                 }
                 buffer.writeVarInt(value.selectedBuildPreset());
                 buffer.writeBoolean(value.collectFluids());
+                buffer.writeBoolean(value.swapMode() == SwapMode.CYCLE);
+                buffer.writeBoolean(value.cycleDirection() == CycleDirection.REVERSE);
             },
             buffer -> {
                 boolean exactMatch = buffer.readBoolean();
@@ -104,13 +167,19 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
                 }
                 int selectedBuildPreset = buffer.readVarInt();
                 boolean collectFluids = buffer.readBoolean();
+                boolean cycleMode = buffer.readBoolean();
+                boolean reverseCycle = buffer.readBoolean();
                 return new ToolkitSettings(exactMatch, chainLimit, swapRow, presets, selectedPreset,
-                        allowOtherBlocks, buildPresets, selectedBuildPreset, collectFluids);
+                        allowOtherBlocks, buildPresets, selectedBuildPreset, collectFluids,
+                        cycleMode ? SwapMode.CYCLE : SwapMode.SPECIFIC_ROW,
+                        reverseCycle ? CycleDirection.REVERSE : CycleDirection.FORWARD);
             });
 
     public ToolkitSettings {
         chainLimit = Mth.clamp(chainLimit, MIN_CHAIN_LIMIT, MAX_CHAIN_LIMIT);
         swapRow = Mth.clamp(swapRow, MIN_SWAP_ROW, MAX_SWAP_ROW);
+        swapMode = swapMode == null ? DEFAULT_SWAP_MODE : swapMode;
+        cycleDirection = cycleDirection == null ? DEFAULT_CYCLE_DIRECTION : cycleDirection;
 
         presets = normalizeChainPresets(presets);
         selectedPreset = Mth.clamp(selectedPreset, 0, presets.size() - 1);
@@ -158,33 +227,56 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
         return this.presets.get(this.selectedPreset);
     }
 
+    /** 修改设置时保留当前物品切换模式 / 循环方向。 */
+    private ToolkitSettings copySettings(boolean requireExactItemMatch, int chainLimit, int swapRow,
+            List<ChainPreset> presets, int selectedPreset, boolean allowBreakingOtherBlocks,
+            List<BuildPreset> buildPresets, int selectedBuildPreset, boolean collectFluids) {
+        return new ToolkitSettings(requireExactItemMatch, chainLimit, swapRow, presets, selectedPreset,
+                allowBreakingOtherBlocks, buildPresets, selectedBuildPreset, collectFluids,
+                this.swapMode, this.cycleDirection);
+    }
+
+    /** 修改物品切换模式。 */
+    public ToolkitSettings withSwapMode(SwapMode mode) {
+        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
+                this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset,
+                this.collectFluids, mode, this.cycleDirection);
+    }
+
+    /** 修改循环方向。 */
+    public ToolkitSettings withCycleDirection(CycleDirection direction) {
+        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
+                this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset,
+                this.collectFluids, this.swapMode, direction);
+    }
+
     public ToolkitSettings withRequireExactItemMatch(boolean value) {
-        return new ToolkitSettings(value, this.chainLimit, this.swapRow, this.presets, this.selectedPreset,
+        return this.copySettings(value, this.chainLimit, this.swapRow, this.presets, this.selectedPreset,
                 this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset, this.collectFluids);
     }
 
     public ToolkitSettings withChainLimit(int limit) {
-        return new ToolkitSettings(this.requireExactItemMatch, limit, this.swapRow, this.presets,
+        return this.copySettings(this.requireExactItemMatch, limit, this.swapRow, this.presets,
                 this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset,
                 this.collectFluids);
     }
 
     /** “交换行”：与快捷栏交换的背包行（1-3，超出范围会被夹到合法值）。 */
     public ToolkitSettings withSwapRow(int row) {
-        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, row, this.presets,
+        return this.copySettings(this.requireExactItemMatch, this.chainLimit, row, this.presets,
                 this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset,
                 this.collectFluids);
     }
 
     /** 大量方块的连锁范围里是否也破坏“非指向”的方块。 */
     public ToolkitSettings withAllowBreakingOtherBlocks(boolean value) {
-        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
+        return this.copySettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
                 this.selectedPreset, value, this.buildPresets, this.selectedBuildPreset, this.collectFluids);
     }
 
     /** 是否在制作蓝图时自动收集可用桶接取的流体源头。 */
     public ToolkitSettings withCollectFluids(boolean value) {
-        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
+        return this.copySettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
                 this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset,
                 value);
     }
@@ -193,7 +285,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
     public ToolkitSettings withPreset(ChainPreset preset) {
         List<ChainPreset> copy = new ArrayList<>(this.presets);
         copy.set(this.selectedPreset, preset);
-        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, copy,
+        return this.copySettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, copy,
                 this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset,
                 this.collectFluids);
     }
@@ -205,7 +297,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
 
     /** 切换到指定预设（超出范围会被夹到合法值）。 */
     public ToolkitSettings withSelectedPreset(int index) {
-        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets, index,
+        return this.copySettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets, index,
                 this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset, this.collectFluids);
     }
 
@@ -216,7 +308,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
         }
         List<ChainPreset> copy = new ArrayList<>(this.presets);
         copy.add(this.preset().withName(this.nextChainPresetName()));
-        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, copy,
+        return this.copySettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, copy,
                 copy.size() - 1, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset,
                 this.collectFluids);
     }
@@ -228,7 +320,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
         }
         List<ChainPreset> copy = new ArrayList<>(this.presets);
         copy.remove(this.selectedPreset);
-        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, copy,
+        return this.copySettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, copy,
                 Math.min(this.selectedPreset, copy.size() - 1), this.allowBreakingOtherBlocks,
                 this.buildPresets, this.selectedBuildPreset, this.collectFluids);
     }
@@ -242,7 +334,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
     public ToolkitSettings withBuildPreset(BuildPreset preset) {
         List<BuildPreset> copy = new ArrayList<>(this.buildPresets);
         copy.set(this.selectedBuildPreset, preset);
-        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
+        return this.copySettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
                 this.selectedPreset, this.allowBreakingOtherBlocks, copy, this.selectedBuildPreset,
                 this.collectFluids);
     }
@@ -254,7 +346,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
 
     /** 切换到指定快速建造预设（超出范围会被夹到合法值）。 */
     public ToolkitSettings withSelectedBuildPreset(int index) {
-        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
+        return this.copySettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
                 this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, index, this.collectFluids);
     }
 
@@ -265,7 +357,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
         }
         List<BuildPreset> copy = new ArrayList<>(this.buildPresets);
         copy.add(this.buildPreset().withName(this.nextBuildPresetName()));
-        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
+        return this.copySettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
                 this.selectedPreset, this.allowBreakingOtherBlocks, copy, copy.size() - 1, this.collectFluids);
     }
 
@@ -276,7 +368,7 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
         }
         List<BuildPreset> copy = new ArrayList<>(this.buildPresets);
         copy.remove(this.selectedBuildPreset);
-        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
+        return this.copySettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
                 this.selectedPreset, this.allowBreakingOtherBlocks, copy,
                 Math.min(this.selectedBuildPreset, copy.size() - 1), this.collectFluids);
     }

@@ -93,9 +93,11 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private static final int WHITELIST_HEADING_Y = 50;
     private static final int WHITELIST_HINT_Y = 120;
 
-    /** 物品切换页：说明文字的纵坐标，以及“交换行”按钮。 */
+    /** 物品切换页：说明文字的纵坐标，以及“切换模式 / 交换行 / 循环方向”按钮。 */
     private static final int HOTBAR_DESC_Y = 34;
-    private static final int HOTBAR_SWAP_ROW_Y = 84;
+    private static final int HOTBAR_SWAP_MODE_Y = 88;
+    private static final int HOTBAR_SWAP_ROW_Y = 108;
+    private static final int HOTBAR_CYCLE_DIRECTION_Y = 128;
 
     /** 连锁破坏页：各行的纵坐标。 */
     private static final int CHAIN_LIMIT_Y = 30;
@@ -145,6 +147,8 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private final List<AbstractWidget> copyPasteWidgets = new ArrayList<>();
 
     private Button swapRowButton;
+    private Button swapModeButton;
+    private Button cycleDirectionButton;
     /** 预设名称文字框（连锁破坏 / 快速建造各一个；不画标题，直接编辑）。 */
     private EditBox presetNameField;
     private EditBox buildPresetNameField;
@@ -213,11 +217,19 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                     feature, pressed -> this.selectFeature(feature)));
         }
 
-        // 物品切换：交换行（与快捷栏交换的背包行，1 = 最上面一行，3 = 最后一行）
+        // 物品切换：切换模式 / 指定行 / 循环方向
+        this.swapModeButton = this.addToGroup(new StepperButton(
+                x + SETTINGS_X, y + HOTBAR_SWAP_MODE_Y, SETTINGS_WIDTH, 14, Component.empty(),
+                Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.swap_mode.tooltip")),
+                () -> this.changeSwapMode(1), () -> this.changeSwapMode(-1)), this.hotbarSwapWidgets);
         this.swapRowButton = this.addToGroup(new StepperButton(
                 x + SETTINGS_X, y + HOTBAR_SWAP_ROW_Y, SETTINGS_WIDTH, 14, Component.empty(),
                 Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.swap_row.tooltip")),
                 () -> this.changeSwapRow(1), () -> this.changeSwapRow(-1)), this.hotbarSwapWidgets);
+        this.cycleDirectionButton = this.addToGroup(new StepperButton(
+                x + SETTINGS_X, y + HOTBAR_CYCLE_DIRECTION_Y, SETTINGS_WIDTH, 14, Component.empty(),
+                Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.cycle_direction.tooltip")),
+                () -> this.changeCycleDirection(1), () -> this.changeCycleDirection(-1)), this.hotbarSwapWidgets);
 
         // 自动补充：补充物品是否完全一致（放在白名单上方）
         this.exactMatchButton = this.addToGroup(Button
@@ -411,6 +423,17 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         boolean autoRefill = this.activeFeature == Feature.AUTO_REFILL;
         this.menu.setWhitelistVisible(autoRefill);
         this.menu.setInventoryVisible(autoRefill);
+        this.updateHotbarSwapVisibility();
+    }
+
+    /** 物品切换页：“交换行”只在指定行模式显示，“循环方向”只在循环模式显示。 */
+    private void updateHotbarSwapVisibility() {
+        boolean hotbarPage = this.activeFeature == Feature.HOTBAR_SWAP;
+        this.swapModeButton.visible = hotbarPage;
+        this.swapRowButton.visible = hotbarPage
+                && this.settings.swapMode() == ToolkitSettings.SwapMode.SPECIFIC_ROW;
+        this.cycleDirectionButton.visible = hotbarPage
+                && this.settings.swapMode() == ToolkitSettings.SwapMode.CYCLE;
     }
 
     private static void setGroupVisible(List<AbstractWidget> group, boolean visible) {
@@ -419,6 +442,14 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         }
     }
 
+
+    @Override
+    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        super.render(guiGraphics, mouseX, mouseY, partialTick);
+        // 原版容器界面是在各自的 render 里手动补上悬停物品的 tooltip，
+        // AbstractContainerScreen 本身不画；这里补上，自动补充页的槽位才能看到物品信息。
+        this.renderTooltip(guiGraphics, mouseX, mouseY);
+    }
 
     @Override
     protected void renderBg(GuiGraphics guiGraphics, float partialTick, int mouseX, int mouseY) {
@@ -593,6 +624,20 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     /** 交换行：左键 +1、右键 -1（1-3）。 */
     private void changeSwapRow(int direction) {
         this.applySettings(this.settings.withSwapRow(this.settings.swapRow() + direction));
+    }
+
+    /** 切换模式：指定行 / 循环。 */
+    private void changeSwapMode(int direction) {
+        ToolkitSettings.SwapMode[] modes = ToolkitSettings.SwapMode.values();
+        int next = Math.floorMod(this.settings.swapMode().ordinal() + direction, modes.length);
+        this.applySettings(this.settings.withSwapMode(modes[next]));
+    }
+
+    /** 循环方向：正序 / 倒序。 */
+    private void changeCycleDirection(int direction) {
+        ToolkitSettings.CycleDirection[] directions = ToolkitSettings.CycleDirection.values();
+        int next = Math.floorMod(this.settings.cycleDirection().ordinal() + direction, directions.length);
+        this.applySettings(this.settings.withCycleDirection(directions[next]));
     }
 
     /**
@@ -773,6 +818,11 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 this.settings.chainLimit()));
         this.swapRowButton.setMessage(Component.translatable("gui.aliyastoolkit.settings.swap_row",
                 this.settings.swapRow()));
+        this.swapModeButton.setMessage(Component.translatable("gui.aliyastoolkit.settings.swap_mode",
+                Component.translatable(this.settings.swapMode().translationKey())));
+        this.cycleDirectionButton.setMessage(Component.translatable(
+                "gui.aliyastoolkit.settings.cycle_direction",
+                Component.translatable(this.settings.cycleDirection().translationKey())));
 
         this.presetNameButton.setMessage(Component.literal(shortName(preset.name())));
         this.presetNameButton.setTooltip(Tooltip.create(Component.translatable(
@@ -845,6 +895,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
 
         // 名称文字框跟当前预设保持一致（切换/新建/删除预设后）
         this.updateNameFields();
+        this.updateHotbarSwapVisibility();
     }
 
     private static Component onOff(boolean value) {
