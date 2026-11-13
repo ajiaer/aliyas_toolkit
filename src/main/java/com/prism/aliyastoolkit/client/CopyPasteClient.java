@@ -79,7 +79,7 @@ import org.lwjgl.opengl.GL11;
  * <li>手持蓝图箱，按 Ctrl + 右键（默认，可改键）进入蓝图建造。没有蓝图进入绘制模式，
  * 有蓝图进入建造模式。</li>
  * <li>绘制模式：第一次选点前显示跟随准星的目标轮廓；右键两次新增选区（浅黄色动态预览），
- * 左键两次删除选区（浅红色动态预览），已确定选区为浅橙色；Ctrl + 左键记录蓝图并收取材料（剪切），
+ * 左键两次删除选区（浅红色动态预览），已确定选区为浅蓝色；Ctrl + 左键记录蓝图并收取材料（剪切），
  * Ctrl + 右键只记录蓝图（复制），两者都会退出绘制模式。</li>
  * <li>建造模式：显示虚影，右键固定、左键解除固定，滚轮调整距离，V 旋转；
  * 固定后 Ctrl + 右键检查材料并建造（不足会提示并退出）。</li>
@@ -89,14 +89,14 @@ import org.lwjgl.opengl.GL11;
  */
 @EventBusSubscriber(modid = AliyasToolkit.MODID, value = Dist.CLIENT)
 public final class CopyPasteClient {
-    /** 已确定的选区轮廓：浅橙色。 */
-    private static final float SELECTION_RED = 1.0F;
+    /** 已确定的选区轮廓：浅蓝色。 */
+    private static final float SELECTION_RED = 0.45F;
     private static final float SELECTION_GREEN = 0.78F;
-    private static final float SELECTION_BLUE = 0.42F;
-    /** 选区轮廓：被方块挡住部分的暗橙色。 */
-    private static final float SELECTION_BEHIND_RED = 0.60F;
-    private static final float SELECTION_BEHIND_GREEN = 0.42F;
-    private static final float SELECTION_BEHIND_BLUE = 0.20F;
+    private static final float SELECTION_BLUE = 1.0F;
+    /** 选区轮廓：被方块挡住部分的暗蓝色。 */
+    private static final float SELECTION_BEHIND_RED = 0.18F;
+    private static final float SELECTION_BEHIND_GREEN = 0.34F;
+    private static final float SELECTION_BEHIND_BLUE = 0.55F;
     /** 正在动态预览的新增选区：浅黄色。 */
     private static final float PENDING_ADD_RED = 1.0F;
     private static final float PENDING_ADD_GREEN = 0.95F;
@@ -111,13 +111,13 @@ public final class CopyPasteClient {
     private static final float PENDING_REMOVE_BEHIND_RED = 0.55F;
     private static final float PENDING_REMOVE_BEHIND_GREEN = 0.28F;
     private static final float PENDING_REMOVE_BEHIND_BLUE = 0.28F;
-    /** 预览轮廓：蓝色。 */
+    /** 建造模式虚影轮廓（材料足够、可以建造）：绿色。 */
     private static final float PREVIEW_RED = 0.35F;
-    private static final float PREVIEW_GREEN = 0.65F;
-    private static final float PREVIEW_BLUE = 1.0F;
-    private static final float PREVIEW_BEHIND_RED = 0.10F;
-    private static final float PREVIEW_BEHIND_GREEN = 0.24F;
-    private static final float PREVIEW_BEHIND_BLUE = 0.50F;
+    private static final float PREVIEW_GREEN = 0.95F;
+    private static final float PREVIEW_BLUE = 0.45F;
+    private static final float PREVIEW_BEHIND_RED = 0.14F;
+    private static final float PREVIEW_BEHIND_GREEN = 0.40F;
+    private static final float PREVIEW_BEHIND_BLUE = 0.18F;
     /** 准星实时跟随目标方块的粗框宽度。 */
     private static final float TARGET_PREVIEW_WIDTH = 0.020F;
     /** 已确定选区可见前缘的粗轮廓宽度。 */
@@ -137,7 +137,7 @@ public final class CopyPasteClient {
 
     /** 虚影距离限制（玩家眼睛到中心底部）。 */
     private static final double MIN_GHOST_DISTANCE = 2.0D;
-    private static final double MAX_GHOST_DISTANCE = 20.0D;
+    private static final double MAX_GHOST_DISTANCE = 32.0D;
     /** 进入建造模式时的默认距离：视线前方 4 格。 */
     private static final double DEFAULT_GHOST_DISTANCE = 4.0D;
     /** 自动避开玩家后额外增加的距离。 */
@@ -1322,7 +1322,7 @@ public final class CopyPasteClient {
                 renderEdge(poseStack, behind, edge,
                         SELECTION_BEHIND_RED, SELECTION_BEHIND_GREEN, SELECTION_BEHIND_BLUE);
             }
-            // 已确定的选区始终是黄色；动态预览颜色优先级更高，覆盖在黄色之上。
+            // 已确定的选区始终是浅蓝色；动态预览颜色优先级更高，覆盖在浅蓝色之上。
             float behindRed = previewInvalid ? INVALID_BEHIND_RED
                     : previewKind == PreviewKind.SELECTION_FOLLOW ? PENDING_ADD_BEHIND_RED
                     : previewKind == PreviewKind.SELECTION_ADD ? PENDING_ADD_BEHIND_RED

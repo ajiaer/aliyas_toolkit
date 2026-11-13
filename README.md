@@ -36,9 +36,9 @@
 1. **Hotbar switching** (`X`): swap the hotbar with a chosen inventory row, or cycle the three inventory rows and the hotbar in forward/reverse order, without opening the inventory. Switching does not trigger auto-refill.
 2. **Automatic refill**: whitelisted hotbar items are moved back from the inventory when they disappear. Optional exact item/component matching; durability is ignored.
 3. **Chain mining** (`Z` toggle): break connected identical blocks, with a configurable chain limit and a massive-block preset (cross-section + layers + direction). Drops are collected and merged at the origin.
-4. **Quick build** (`C` toggle): a green target outline follows your crosshair before the first point; mark two points, choose operation / dimension / shape / fill, and build with the block in your main hand. Up to 4096 blocks, 40-block reach, server validation.
+4. **Quick build** (`C` toggle): a green target outline follows your crosshair before the first point; mark two points, choose operation / dimension / shape / fill, and build with the block in your main hand. Up to 4096 blocks, 64-block reach, server validation.
 5. **Blueprint build**: hold any blueprint box and press `Ctrl + right click`. An empty blueprint enters draw mode; an existing blueprint enters build mode. The entry prompt names the current mode as **Blueprint Build: Draw Mode** or **Blueprint Build: Build Mode**, and the target outline follows your crosshair before the first point. Draw with right/left clicks, snap points to block faces with `Shift`, press `Ctrl + left click` to record and collect materials (cut), or `Ctrl + right click` to record the blueprint only (copy). Preview with a ghost, pin/unpin with right/left click, and build with `Ctrl + right click`.
-6. **Blueprint boxes**: 7 tiers from 27 to 162 slots, vanilla chest model and lid animation, 5×9 scrollable screen, ghost placeholders, material checking, hopper/comparator support, and per-tier fire/explosion/void protection.
+6. **Blueprint boxes**: 6 tiers from 27 to 144 slots, vanilla chest model and lid animation, 5×9 scrollable screen, ghost placeholders, material checking, hopper/comparator support, and per-tier fire/explosion/void protection.
 7. **Auto Collect Fluids** (default ON): in cut mode, bucketable fluid sources are recorded and collected into filled buckets if enough empty buckets are available; otherwise a message is shown and fluids are skipped without cancelling the blueprint. In copy mode, fluid sources are recorded without consuming buckets or adding filled buckets.
 8. **Per-player settings**: open with `Alt + X`; all values are saved with player data and survive death / respawn.
 
@@ -193,7 +193,7 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 - 右键第二次确定终点：检查主手可放置方块和数量（生存模式优先消耗背包，再快捷栏；创造模式不检查也不消耗），足够则立刻建造。
 - 支持点到点 / 中心到点，一维 / 二维 / 三维，直线 / 矩形 / 圆 / 球，实心 / 空心 / 框架，并自动处理形状约束。
 - 第一次选点时按原版放置规则记录方块状态（楼梯朝向与上下半、半砖上下半、原木朝向等），之后所有方块沿用该状态；建造完成后按原版 `updateShape` 规则重新计算连接。
-- 一次最多 4096 个方块，目标点离玩家最远 40 格；服务端会重新计算范围并校验距离和方块数量。
+- 一次最多 4096 个方块，目标点离玩家最远 64 格；服务端会重新计算范围并校验距离和方块数量。
 
 ### 5. 蓝图建造
 
@@ -208,9 +208,9 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 
 #### 模式 1 · 绘制
 
-- 右键两个位置**扩选**，动态预览为**浅黄色**，已确定选区为**浅橙色**。
+- 右键两个位置**扩选**，动态预览为**浅黄色**，已确定选区为**浅蓝色**。
 - 进入绘制模式后、第一次选点前，目标格会跟随准星显示淡黄色轮廓，便于确认当前模式已开启。
-- 左键两个位置**缩选**，动态预览为**浅红色**；浅黄 / 浅红都优先于浅橙色显示。
+- 左键两个位置**缩选**，动态预览为**浅红色**；浅黄 / 浅红都优先于浅蓝色显示。
 - 之后右键扩选可以重新覆盖之前删除的区域；选区按操作顺序生效。
 - 可多次叠加、多次删除。
 - 按住吸附键（默认 `Shift`，可改键）时，选点会吸附到指向方块的外侧面，和快速建造的选点规则一致。
@@ -227,7 +227,7 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 - 固定后按 `Ctrl + 右键` 检查材料并建造：
   - 材料足够：扣除蓝图箱里的方块物品、容器内容和流体桶，按虚影位置建造；
   - 材料不足：提示并退出蓝图建造。
-- 虚影透明度略微提高，只绘制玩家可见的方块面；蓝图轮廓线仍然正常显示。
+- 虚影透明度略微提高，只绘制玩家可见的方块面；蓝图轮廓线仍然正常显示：材料足够时可以建造，轮廓为绿色；材料不足时为红色。
 - 玩家与虚影的碰撞**只在刚放出虚影时检测一次**，之后不会再把虚影从玩家身边推开，方便一眼看到完整结构。
 - 寻找合法放置位置的范围为指示器周围半径 **8 格**的球；找不到位置时不在预览阶段反复提示。
 - 箱子、潜影盒、床等 `ENTITYBLOCK_ANIMATED` 方块在虚影中使用真实 BlockState 渲染；相邻方块隐藏面会剔除，实体方块先写深度再半透明绘制。
@@ -252,9 +252,8 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 | 铜制蓝图箱 | 45（5×9） | 蓝图箱 + 8 铜锭 |
 | 铁制蓝图箱 | 63（7×9） | 铜制 + 8 铁锭 |
 | 金制蓝图箱 | 81（9×9） | 铁制 + 8 金锭 |
-| 黑曜石蓝图箱 | 108（12×9） | 金制 + 8 黑曜石 |
-| 钻石蓝图箱 | 135（15×9） | 黑曜石 + 8 钻石 |
-| 下界合金蓝图箱 | 162（18×9） | 锻造台：钻石箱 + 下界合金锭 + 下界合金升级模板 |
+| 钻石蓝图箱 | 108（12×9） | 金制 + 8 钻石 |
+| 下界合金蓝图箱 | 144（16×9） | 锻造台：钻石箱 + 下界合金锭 + 下界合金升级模板 |
 
 - 方块直接继承原版 `ChestBlock` / `ChestBlockEntity`，使用原版 `ChestRenderer`，拥有箱子形状、朝向、比较器、开盖音效和翻盖动画；蓝图箱强制保持单箱，不会合并成双箱，也不能放进另一个蓝图箱。
 - 界面最多显示 5 行 × 9 列，列与玩家背包对齐；超过 5 行时右侧有滚动条，可用滚轮或拖动。主面板使用原版 `generic_54.png`，右侧扩展区放滚动条和按钮，左右之间没有黑缝。
@@ -265,7 +264,7 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 - 掉落物保护：
   - 所有蓝图箱在水中向上漂浮；
   - 铜制及以上方块本体防火 / 防岩浆；
-  - 黑曜石及以上方块和掉落物防爆炸；
+  - 钻石及以上方块和掉落物防爆炸；
   - 下界合金掉落物防火 / 防岩浆、在岩浆中漂浮，掉入虚空会传送到附近安全位置。
 - 铁砧改名会保留内容 / 蓝图；破坏方块会保留物品、蓝图和容器内容（创造模式也会生成掉落物）。
 
@@ -275,7 +274,7 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 
 - 左侧 5 个功能页：`物品切换` / `自动补充` / `连锁破坏` / `快速建造` / `蓝图建造`。
 - **物品切换**：切换模式、指定行和循环方向设置。
-- **自动补充**：完全一致开关 + 3×3 白名单；从背包拿起物品左键设置，右键清空。
+- **自动补充**：完全一致开关 + 3×3 白名单；从背包拿起物品左键设置，右键清空；鼠标悬停在槽位上可以查看物品信息。
 - **连锁破坏**：连锁数量、大量方块预设、锁定方向、允许其它方块。
 - **快速建造**：预设选择、新建 / 删除、操作 / 维度 / 形状 / 填充。
 - **蓝图建造**：自动收集流体开关，以及绘制 / 建造 / 缩放 / 旋转 / 打开箱子等操作提示；提示中的按键跟随实际按键绑定。

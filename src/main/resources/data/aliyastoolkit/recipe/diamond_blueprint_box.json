@@ -4,7 +4,7 @@
   "pattern": ["MMM", "MBM", "MMM"],
   "key": {
     "M": { "item": "minecraft:diamond" },
-    "B": { "item": "aliyastoolkit:obsidian_blueprint_box" }
+    "B": { "item": "aliyastoolkit:gold_blueprint_box" }
   },
   "result": { "id": "aliyastoolkit:diamond_blueprint_box", "count": 1 }
 }

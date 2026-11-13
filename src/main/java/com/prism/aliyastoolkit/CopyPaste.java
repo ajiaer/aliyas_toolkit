@@ -11,7 +11,7 @@ public final class CopyPaste {
     public static final int MAX_VOLUME = 4096;
 
     /** 操作位置离玩家的最大距离（与快速建造一致）。 */
-    public static final double MAX_DISTANCE = 40.0D;
+    public static final double MAX_DISTANCE = 64.0D;
 
     /** 绕 Y 轴旋转的 4 个方向（0 = 不旋转，每 +1 顺时针 90°）。 */
     public static final int ROTATIONS = 4;

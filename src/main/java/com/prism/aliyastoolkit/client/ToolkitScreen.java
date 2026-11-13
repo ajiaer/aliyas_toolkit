@@ -444,6 +444,14 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
 
 
     @Override
+    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        super.render(guiGraphics, mouseX, mouseY, partialTick);
+        // 原版容器界面是在各自的 render 里手动补上悬停物品的 tooltip，
+        // AbstractContainerScreen 本身不画；这里补上，自动补充页的槽位才能看到物品信息。
+        this.renderTooltip(guiGraphics, mouseX, mouseY);
+    }
+
+    @Override
     protected void renderBg(GuiGraphics guiGraphics, float partialTick, int mouseX, int mouseY) {
         int left = this.leftPos;
         int top = this.topPos;
