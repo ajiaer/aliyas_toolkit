@@ -29,7 +29,6 @@
 | Java | **21** |
 | Environment | **Client + server** |
 | Tested on | Vanilla-only: Minecraft 1.21.1 + NeoForge, single player / integrated server |
-| Version | **1.21.1-1.1.1** |
 
 ## Feature summary
 
@@ -123,7 +122,6 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 | Java | **21** |
 | 安装位置 | **客户端 + 服务端**（设计上需要双端安装） |
 | 测试条件 | **仅原版环境**：Minecraft 1.21.1 + NeoForge，单人游戏 / 内置服务器 |
-| 当前版本 | **1.21.1-1.1.1** |
 
 - 模组 id：`aliyastoolkit`
 - 命名空间：`aliyastoolkit:`

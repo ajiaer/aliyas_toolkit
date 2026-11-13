@@ -22,7 +22,6 @@
 | Java | **21** |
 | Installation | **Client and server** for multiplayer; singleplayer needs the client only |
 | Other mods | None required |
-| Current version | **1.21.1-1.1.1** |
 
 ## First steps
 
@@ -224,7 +223,6 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 | Java | **21** |
 | 安装位置 | 多人游戏需要**客户端和服务端**都安装；单人游戏只需客户端 |
 | 其它模组 | 无需安装 |
-| 当前版本 | **1.21.1-1.1.1** |
 
 ## 快速开始
 

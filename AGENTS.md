@@ -32,6 +32,12 @@
 - 版本号、适用环境、测试范围、安装位置等信息写在标题下方，不占用分块。
 - 每条只写玩家能感知的结果，内部实现细节不写；`docs\release\changelog` 面向网站发布，可以在版本日志基础上进一步精简。
 
+# 版本号规范
+
+- **当前版本只记录在两处**：`gradle.properties` 的 `mod_version`，以及对应版本的更新日志（`changelog` / `docs\release\changelog`）。
+- `README.md` 与 `docs\release\description.md` **不记录当前版本**（不写「当前版本 / Current version」这类条目）。
+- 这两个文件里出现的版本号一律只是**格式示例**，统一使用 `1.1.1`（如示例产物名 `aliyastoolkit-1.21.1-1.1.1.jar`）。
+
 # 注意事项
 - 除非特意说明，更新日志应放到对应mc版本最新的日志文档里
 - 除非特意说明，禁止对进行git相关的指令操作，查询除外
