@@ -36,9 +36,14 @@ All keys work only while you are in-game and can be changed in **Options → Con
 
 ## Hotbar and inventory
 
-### Swap the hotbar with an inventory row
+### Hotbar switching
 
-Press **X** to exchange the nine hotbar slots with a chosen row of your inventory. The default row is the bottom inventory row, and you can choose another row in the settings screen. You do not need to open the inventory, and the swap does not trigger automatic refill.
+Press **X** to switch the hotbar in one of two modes:
+
+- **Specific Row** (default): swap the nine hotbar slots with a chosen inventory row (1 = top, 3 = bottom).
+- **Cycle**: rotate all three inventory rows and the hotbar. Forward: row 1 → row 2 → row 3 → hotbar → row 1; Reverse is the opposite order.
+
+You do not need to open the inventory. Switching does not trigger automatic refill.
 
 ### Automatic refill
 
@@ -86,7 +91,7 @@ Hold a blueprint box in your main hand and press **Ctrl + right-click**.
 
 Before the first point is selected, a pale-yellow target outline follows your crosshair so you can see that draw mode is active.
 
-- Right-click two positions to **expand** the selection. The current selection is orange, and the new preview is pale yellow.
+- Right-click two positions to **expand** the selection. The current selection is light orange, and the new preview is pale yellow.
 - Left-click two positions to **shrink** the selection. The preview is pale red.
 - A later right-click selection can add back an area that was previously removed; selections are applied in operation order.
 - You can add or remove several selections in a row.
@@ -147,7 +152,7 @@ To open the blueprint box you are holding, press **Alt + right-click**. The same
 
 Press **Alt + X** to open the settings screen. The five tabs are:
 
-- **Item Switching** — choose which inventory row is swapped with the hotbar.
+- **Item Switching** — choose Specific Row / Cycle, the inventory row for Specific Row mode, and the cycle direction.
 - **Automatic Refill** — turn Exact Match on or off and edit the nine-slot whitelist.
 - **Chain Mining** — set the chain limit, massive-block presets, direction lock, and whether other blocks may be broken.
 - **Quick Build** — choose, create, or delete presets and set the operation, dimension, shape, and fill.
@@ -162,7 +167,7 @@ For multiplayer, install the mod on **both the client and the server**. Each pla
 | Action | Default key |
 | --- | --- |
 | Open Aliya's Toolkit settings | **Alt + X** |
-| Swap hotbar with inventory row | **X** |
+| Switch hotbar (Specific Row / Cycle) | **X** |
 | Toggle chain mining | Tap **Z** |
 | Change massive-block preset | Hold **Z** and scroll |
 | Toggle quick build | Tap **C** |
@@ -234,9 +239,14 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 
 ## 快捷栏与背包
 
-### 快捷栏交换
+### 快捷栏切换
 
-按 **X**，把快捷栏的九个格子和指定的一行背包互换。默认交换最下面一行，可以在设置中改选其它行。交换不需要打开背包，也不会触发自动补充。
+按 **X** 切换快捷栏，支持两种模式：
+
+- **指定行**（默认）：把快捷栏九个格子和指定的一行背包互换（1 = 最上面一行，3 = 最后一行）。
+- **循环**：让背包三行和快捷栏按顺序轮换。正序为第一行 → 第二行 → 第三行 → 快捷栏 → 第一行；倒序方向相反。
+
+切换不需要打开背包，也不会触发自动补充。
 
 ### 自动补充
 
@@ -284,7 +294,7 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 
 第一次选点前，目标格会跟随准星显示淡黄色轮廓，便于确认当前处于绘制模式。
 
-- 右键两个位置**扩选**，已确定区域显示为橙色，新增预览显示为浅黄色。
+- 右键两个位置**扩选**，已确定区域显示为浅橙色，新增预览显示为浅黄色。
 - 左键两个位置**缩选**，预览显示为浅红色。
 - 之后右键扩选可以重新覆盖之前删除的区域；选区按操作顺序生效。
 - 可以连续多次添加或删除选区。
@@ -345,7 +355,7 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 
 按 **Alt + X** 打开设置界面，左侧有五个页面：
 
-- **物品切换**：选择与快捷栏交换的背包行。
+- **物品切换**：选择指定行 / 循环模式、指定行号以及循环方向。
 - **自动补充**：开关“完全一致”，编辑九格白名单。
 - **连锁破坏**：设置连锁数量、大量方块预设、方向锁定和是否允许其它方块。
 - **快速建造**：选择、新建或删除预设，设置操作、维度、形状和填充方式。
@@ -360,7 +370,7 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 | 操作 | 默认按键 |
 | --- | --- |
 | 打开 Aliya的工具包 设置 | **Alt + X** |
-| 快捷栏与背包行交换 | **X** |
+| 快捷栏切换（指定行 / 循环） | **X** |
 | 开关连锁破坏 | 短按 **Z** |
 | 切换大量方块预设 | 按住 **Z** 滚动滚轮 |
 | 开关快速建造 | 短按 **C** |

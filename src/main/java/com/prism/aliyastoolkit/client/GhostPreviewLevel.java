@@ -9,6 +9,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.BlockAndTintGetter;
 import net.minecraft.world.level.ColorResolver;
+import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.lighting.LevelLightEngine;
@@ -22,10 +23,16 @@ import net.minecraft.world.level.material.FluidState;
 final class GhostPreviewLevel implements BlockAndTintGetter {
     private final ClientLevel level;
     private final Map<BlockPos, BlockState> previewStates;
+    private final boolean fullBright;
 
     GhostPreviewLevel(ClientLevel level, Map<BlockPos, BlockState> previewStates) {
+        this(level, previewStates, false);
+    }
+
+    GhostPreviewLevel(ClientLevel level, Map<BlockPos, BlockState> previewStates, boolean fullBright) {
         this.level = level;
         this.previewStates = previewStates;
+        this.fullBright = fullBright;
     }
 
     @Override
@@ -47,12 +54,23 @@ final class GhostPreviewLevel implements BlockAndTintGetter {
 
     @Override
     public float getShade(Direction direction, boolean shade) {
-        return this.level.getShade(direction, shade);
+        return this.fullBright ? 1.0F : this.level.getShade(direction, shade);
     }
 
     @Override
     public LevelLightEngine getLightEngine() {
         return this.level.getLightEngine();
+    }
+
+    /** 可选满亮度模式；蓝图范围预览当前保持真实世界光照。 */
+    @Override
+    public int getBrightness(LightLayer layer, BlockPos pos) {
+        return this.fullBright ? 15 : this.level.getBrightness(layer, pos);
+    }
+
+    @Override
+    public int getRawBrightness(BlockPos pos, int amount) {
+        return this.fullBright ? 15 : this.level.getRawBrightness(pos, amount);
     }
 
     @Override

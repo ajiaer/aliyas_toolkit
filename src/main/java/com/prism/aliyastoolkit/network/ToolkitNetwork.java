@@ -21,8 +21,9 @@ public final class ToolkitNetwork {
      * 12：蓝图建造改为 V 选区 + 蓝图箱收蓝图 + Ctrl+右键虚影预览；移除 Ctrl+C/X/V。
      * 13：蓝图建造改为蓝图箱双模式（Ctrl+右键进入），新增可配置快捷键；蓝图箱界面支持手持物品。
      * 14：蓝图设置新增自动收集流体，蓝图记录过滤蓝图箱并修复容器复制掉落。
+     * 15：物品切换新增指定行 / 循环模式和循环方向。
      */
-    public static final String PROTOCOL_VERSION = "14";
+    public static final String PROTOCOL_VERSION = "15";
 
     private ToolkitNetwork() {
     }
