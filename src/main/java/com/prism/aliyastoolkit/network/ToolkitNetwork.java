@@ -22,8 +22,12 @@ public final class ToolkitNetwork {
      * 13：蓝图建造改为蓝图箱双模式（Ctrl+右键进入），新增可配置快捷键；蓝图箱界面支持手持物品。
      * 14：蓝图设置新增自动收集流体，蓝图记录过滤蓝图箱并修复容器复制掉落。
      * 15：物品切换新增指定行 / 循环模式和循环方向。
+     * 16：蓝图箱新增流体储罐（金制及以上）、内容切换栏和滚轮切换预设改为 Alt + 滚轮。
+     * 17：蓝图建造新增“记录容器内物品”开关。
+     * 18：连锁破坏新增黑名单（哪些方块使用预设连锁破坏方案）。
+     * 19：快速建造新增“默认位置距离”（Ctrl + 滚轮调整）。
      */
-    public static final String PROTOCOL_VERSION = "15";
+    public static final String PROTOCOL_VERSION = "19";
 
     private ToolkitNetwork() {
     }
@@ -53,10 +57,16 @@ public final class ToolkitNetwork {
         // 快捷键 + 滚轮切换“大量方块”预设
         registrar.playToServer(CyclePresetPayload.TYPE, CyclePresetPayload.STREAM_CODEC,
                 CyclePresetPayload::handle);
+        // 连锁破坏黑名单：在“添加”模式里左键把方块加入黑名单
+        registrar.playToServer(AddChainBlacklistPayload.TYPE, AddChainBlacklistPayload.STREAM_CODEC,
+                AddChainBlacklistPayload::handle);
         // 快速建造
         registrar.playToServer(QuickBuildPayload.TYPE, QuickBuildPayload.STREAM_CODEC, QuickBuildPayload::handle);
         registrar.playToServer(CycleBuildPresetPayload.TYPE, CycleBuildPresetPayload.STREAM_CODEC,
                 CycleBuildPresetPayload::handle);
+        // 快速建造：Ctrl + 滚轮调整“默认位置”的远近
+        registrar.playToServer(QuickBuildDistancePayload.TYPE, QuickBuildDistancePayload.STREAM_CODEC,
+                QuickBuildDistancePayload::handle);
         // 剪切复制
         registrar.playToServer(CopyPastePayload.TYPE, CopyPastePayload.STREAM_CODEC, CopyPastePayload::handle);
         // 蓝图箱：记录蓝图、使用蓝图建造、复制蓝图、界面按钮
@@ -70,6 +80,10 @@ public final class ToolkitNetwork {
                 BlueprintBoxActionPayload::handle);
         registrar.playToServer(BlueprintScrollPayload.TYPE, BlueprintScrollPayload.STREAM_CODEC,
                 BlueprintScrollPayload::handle);
+        registrar.playToServer(BlueprintTankPayload.TYPE, BlueprintTankPayload.STREAM_CODEC,
+                BlueprintTankPayload::handle);
+        registrar.playToServer(BlueprintViewModePayload.TYPE, BlueprintViewModePayload.STREAM_CODEC,
+                BlueprintViewModePayload::handle);
         registrar.playToServer(OpenBlueprintBoxPayload.TYPE, OpenBlueprintBoxPayload.STREAM_CODEC,
                 OpenBlueprintBoxPayload::handle);
         // 自动补充

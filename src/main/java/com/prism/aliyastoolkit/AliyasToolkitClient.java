@@ -146,7 +146,7 @@ public class AliyasToolkitClient {
             KeyModifier.CONTROL,
             InputConstants.Type.MOUSE,
             GLFW.GLFW_MOUSE_BUTTON_RIGHT,
-            KEY_CATEGORY, 5);
+            KEY_CATEGORY, 8);
 
     /**
      * 蓝图绘制：记录结构并把材料收进蓝图箱，同时清除源方块（剪切）。
@@ -158,7 +158,7 @@ public class AliyasToolkitClient {
             KeyModifier.CONTROL,
             InputConstants.Type.MOUSE,
             GLFW.GLFW_MOUSE_BUTTON_LEFT,
-            KEY_CATEGORY, 6);
+            KEY_CATEGORY, 5);
 
     /** 蓝图建造：在没有物品的蓝图箱上切换绘制 / 建造模式。 */
     public static final KeyMapping BLUEPRINT_MODE_KEY = new OrderedKeyMapping(
@@ -182,7 +182,7 @@ public class AliyasToolkitClient {
             KeyConflictContext.IN_GAME,
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_LEFT_SHIFT,
-            KEY_CATEGORY, 8);
+            KEY_CATEGORY, 6);
 
     /**
      * 退出当前工具模式：连锁破坏、快速建造、蓝图建造都可以用这个键退出。

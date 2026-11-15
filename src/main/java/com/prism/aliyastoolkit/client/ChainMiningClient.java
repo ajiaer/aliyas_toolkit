@@ -21,6 +21,7 @@ import com.prism.aliyastoolkit.network.SetChainStatePayload;
 
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -291,10 +292,8 @@ public final class ChainMiningClient {
     }
 
     /**
-     * 按住连锁快捷键（默认 Z）时，用滚轮切换大量方块的预设：
+     * 处于连锁破坏状态时，按 Alt + 滚轮切换大量方块的预设：
      * 向下滚 → 下一个预设，向上滚 → 上一个预设；到两端就停住，不会循环（并阻止滚轮顺带切换快捷栏）。
-     * <p>
-     * 这一次按住期间只要滚动过滚轮，就认为玩家是在“长按切预设”，松开时不再切换连锁开关。
      */
     @SubscribeEvent
     static void onMouseScroll(InputEvent.MouseScrollingEvent event) {
@@ -305,7 +304,7 @@ public final class ChainMiningClient {
         if (!Config.ENABLE_CHAIN_MINING.getAsBoolean()) {
             return;
         }
-        if (!AliyasToolkitClient.CHAIN_MINE_KEY.isDown()) {
+        if (!Screen.hasAltDown()) {
             return;
         }
         // 只有连锁破坏已经开启时才允许用滚轮切换预设
@@ -318,7 +317,6 @@ public final class ChainMiningClient {
         }
 
         event.setCanceled(true);
-        scrolledWhileHeld = true;
         switchPreset(minecraft, delta < 0.0D ? 1 : -1);
     }
 

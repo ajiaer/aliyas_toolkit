@@ -1,14 +1,19 @@
 package com.prism.aliyastoolkit;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.block.Block;
+
 
 /**
  * 玩家自己可配置的功能参数。
@@ -21,10 +26,10 @@ import net.minecraft.util.Mth;
  * </ul>
  * 本类是不可变对象：修改设置时用 {@code withXxx(...)} 生成新实例，再写回玩家数据。
  */
-public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int swapRow,
-        List<ChainPreset> presets, int selectedPreset, boolean allowBreakingOtherBlocks,
-        List<BuildPreset> buildPresets, int selectedBuildPreset, boolean collectFluids,
-        SwapMode swapMode, CycleDirection cycleDirection) {
+public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, List<ResourceLocation> chainBlacklist,
+        int swapRow, List<ChainPreset> presets, int selectedPreset, boolean allowBreakingOtherBlocks,
+        List<BuildPreset> buildPresets, int selectedBuildPreset, int quickBuildDistance, boolean collectFluids,
+        boolean recordContainerContents, SwapMode swapMode, CycleDirection cycleDirection) {
     /** 物品切换模式：指定背包行，或让四行循环轮换。 */
     public enum SwapMode {
         SPECIFIC_ROW("gui.aliyastoolkit.swap_mode.specific_row"),
@@ -94,11 +99,33 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
     public static final int MAX_PRESET_NAME_LENGTH = PresetNames.MAX_LENGTH;
     /** 新预设的默认名称前缀：预设1、预设2…… */
     public static final String DEFAULT_PRESET_NAME_PREFIX = PresetNames.DEFAULT_PREFIX;
+    /** 连锁破坏黑名单最多能放多少个方块（界面里按 16×9 显示）。 */
+    public static final int MAX_CHAIN_BLACKLIST = 144;
+    /** 快速建造：指示器没有指向方块时的默认位置距离（格）。 */
+    public static final int MIN_BUILD_DISTANCE = 2;
+    public static final int MAX_BUILD_DISTANCE = 8;
+    public static final int DEFAULT_BUILD_DISTANCE = 2;
+    /** 黑名单的默认内容：常见的大量方块（这些方块使用“预设连锁破坏方案”）。 */
+    public static final List<ResourceLocation> DEFAULT_CHAIN_BLACKLIST = List.of(
+            vanilla("stone"), vanilla("granite"), vanilla("diorite"), vanilla("andesite"),
+            vanilla("deepslate"), vanilla("tuff"), vanilla("calcite"), vanilla("dripstone_block"),
+            vanilla("cobblestone"), vanilla("mossy_cobblestone"), vanilla("cobbled_deepslate"),
+            vanilla("dirt"), vanilla("grass_block"), vanilla("podzol"), vanilla("coarse_dirt"),
+            vanilla("mycelium"), vanilla("rooted_dirt"), vanilla("mud"), vanilla("clay"),
+            vanilla("gravel"), vanilla("sand"), vanilla("red_sand"), vanilla("sandstone"),
+            vanilla("red_sandstone"), vanilla("netherrack"), vanilla("basalt"), vanilla("smooth_basalt"),
+            vanilla("blackstone"), vanilla("soul_sand"), vanilla("soul_soil"), vanilla("magma_block"),
+            vanilla("end_stone"), vanilla("snow_block"));
 
-    /** 新玩家的默认设置：物品完全一致、连锁 64 个、交换最后一行、各一个默认预设、允许破坏其它方块、自动收集流体。 */
-    public static final ToolkitSettings DEFAULT = new ToolkitSettings(true, DEFAULT_CHAIN_LIMIT, DEFAULT_SWAP_ROW,
-            List.of(ChainPreset.DEFAULT), 0, true, List.of(BuildPreset.DEFAULT), 0, true,
-            DEFAULT_SWAP_MODE, DEFAULT_CYCLE_DIRECTION);
+    private static ResourceLocation vanilla(String path) {
+        return ResourceLocation.withDefaultNamespace(path);
+    }
+
+    /** 新玩家的默认设置：物品完全一致、连锁 64 个、交换最后一行、各一个默认预设、允许破坏其它方块、自动收集流体、记录容器内物品。 */
+    public static final ToolkitSettings DEFAULT = new ToolkitSettings(true, DEFAULT_CHAIN_LIMIT,
+            DEFAULT_CHAIN_BLACKLIST, DEFAULT_SWAP_ROW,
+            List.of(ChainPreset.DEFAULT), 0, true, List.of(BuildPreset.DEFAULT), 0, DEFAULT_BUILD_DISTANCE,
+            true, true, DEFAULT_SWAP_MODE, DEFAULT_CYCLE_DIRECTION);
 
     /** 存档用的编解码器（字段都带默认值，老的玩家数据也能读）。 */
     public static final Codec<ToolkitSettings> CODEC = RecordCodecBuilder.create(instance -> instance.group(
@@ -106,6 +133,9 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
                             .forGetter(ToolkitSettings::requireExactItemMatch),
                     Codec.INT.optionalFieldOf("chain_limit", DEFAULT_CHAIN_LIMIT)
                             .forGetter(ToolkitSettings::chainLimit),
+                    ResourceLocation.CODEC.listOf()
+                            .optionalFieldOf("chain_blacklist", DEFAULT_CHAIN_BLACKLIST)
+                            .forGetter(ToolkitSettings::chainBlacklist),
                     Codec.INT.optionalFieldOf("swap_row", DEFAULT_SWAP_ROW)
                             .forGetter(ToolkitSettings::swapRow),
                     ChainPreset.CODEC.listOf().optionalFieldOf("chain_presets", List.of(ChainPreset.DEFAULT))
@@ -118,8 +148,12 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
                             .forGetter(ToolkitSettings::buildPresets),
                     Codec.INT.optionalFieldOf("selected_build_preset", 0)
                             .forGetter(ToolkitSettings::selectedBuildPreset),
+                    Codec.INT.optionalFieldOf("quick_build_distance", DEFAULT_BUILD_DISTANCE)
+                            .forGetter(ToolkitSettings::quickBuildDistance),
                     Codec.BOOL.optionalFieldOf("collect_fluids", true)
                             .forGetter(ToolkitSettings::collectFluids),
+                    Codec.BOOL.optionalFieldOf("record_container_contents", true)
+                            .forGetter(ToolkitSettings::recordContainerContents),
                     Codec.STRING.optionalFieldOf("swap_mode", DEFAULT_SWAP_MODE.name())
                             .xmap(SwapMode::fromName, SwapMode::name)
                             .forGetter(ToolkitSettings::swapMode),
@@ -133,6 +167,10 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
             (buffer, value) -> {
                 buffer.writeBoolean(value.requireExactItemMatch());
                 buffer.writeVarInt(value.chainLimit());
+                buffer.writeVarInt(value.chainBlacklist().size());
+                for (ResourceLocation id : value.chainBlacklist()) {
+                    ResourceLocation.STREAM_CODEC.encode(buffer, id);
+                }
                 buffer.writeVarInt(value.swapRow());
                 buffer.writeVarInt(value.presets().size());
                 for (ChainPreset preset : value.presets()) {
@@ -145,13 +183,20 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
                     BuildPreset.STREAM_CODEC.encode(buffer, preset);
                 }
                 buffer.writeVarInt(value.selectedBuildPreset());
+                buffer.writeVarInt(value.quickBuildDistance());
                 buffer.writeBoolean(value.collectFluids());
+                buffer.writeBoolean(value.recordContainerContents());
                 buffer.writeBoolean(value.swapMode() == SwapMode.CYCLE);
                 buffer.writeBoolean(value.cycleDirection() == CycleDirection.REVERSE);
             },
             buffer -> {
                 boolean exactMatch = buffer.readBoolean();
                 int chainLimit = buffer.readVarInt();
+                int blacklistCount = buffer.readVarInt();
+                List<ResourceLocation> chainBlacklist = new ArrayList<>(blacklistCount);
+                for (int i = 0; i < blacklistCount; i++) {
+                    chainBlacklist.add(ResourceLocation.STREAM_CODEC.decode(buffer));
+                }
                 int swapRow = buffer.readVarInt();
                 int presetCount = buffer.readVarInt();
                 List<ChainPreset> presets = new ArrayList<>(presetCount);
@@ -166,17 +211,22 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
                     buildPresets.add(BuildPreset.STREAM_CODEC.decode(buffer));
                 }
                 int selectedBuildPreset = buffer.readVarInt();
+                int quickBuildDistance = buffer.readVarInt();
                 boolean collectFluids = buffer.readBoolean();
+                boolean recordContainerContents = buffer.readBoolean();
                 boolean cycleMode = buffer.readBoolean();
                 boolean reverseCycle = buffer.readBoolean();
-                return new ToolkitSettings(exactMatch, chainLimit, swapRow, presets, selectedPreset,
-                        allowOtherBlocks, buildPresets, selectedBuildPreset, collectFluids,
+                return new ToolkitSettings(exactMatch, chainLimit, chainBlacklist, swapRow, presets, selectedPreset,
+                        allowOtherBlocks, buildPresets, selectedBuildPreset, quickBuildDistance, collectFluids,
+                        recordContainerContents,
                         cycleMode ? SwapMode.CYCLE : SwapMode.SPECIFIC_ROW,
                         reverseCycle ? CycleDirection.REVERSE : CycleDirection.FORWARD);
             });
 
     public ToolkitSettings {
         chainLimit = Mth.clamp(chainLimit, MIN_CHAIN_LIMIT, MAX_CHAIN_LIMIT);
+        chainBlacklist = normalizeChainBlacklist(chainBlacklist);
+        quickBuildDistance = Mth.clamp(quickBuildDistance, MIN_BUILD_DISTANCE, MAX_BUILD_DISTANCE);
         swapRow = Mth.clamp(swapRow, MIN_SWAP_ROW, MAX_SWAP_ROW);
         swapMode = swapMode == null ? DEFAULT_SWAP_MODE : swapMode;
         cycleDirection = cycleDirection == null ? DEFAULT_CYCLE_DIRECTION : cycleDirection;
@@ -222,32 +272,104 @@ public record ToolkitSettings(boolean requireExactItemMatch, int chainLimit, int
         return List.copyOf(result);
     }
 
+    /** 黑名单去重并限制数量（NULL / 空列表表示黑名单为空）。 */
+    private static List<ResourceLocation> normalizeChainBlacklist(List<ResourceLocation> input) {
+        if (input == null || input.isEmpty()) {
+            return List.of();
+        }
+        List<ResourceLocation> result = new ArrayList<>(Math.min(input.size(), MAX_CHAIN_BLACKLIST));
+        for (ResourceLocation id : input) {
+            if (id != null && !result.contains(id) && result.size() < MAX_CHAIN_BLACKLIST) {
+                result.add(id);
+            }
+        }
+        return List.copyOf(result);
+    }
+
     /** 当前选中的“大量方块”预设。 */
     public ChainPreset preset() {
         return this.presets.get(this.selectedPreset);
     }
 
-    /** 修改设置时保留当前物品切换模式 / 循环方向。 */
+    /** 修改设置时保留当前物品切换模式 / 循环方向 / 记录容器内物品 / 黑名单。 */
     private ToolkitSettings copySettings(boolean requireExactItemMatch, int chainLimit, int swapRow,
             List<ChainPreset> presets, int selectedPreset, boolean allowBreakingOtherBlocks,
             List<BuildPreset> buildPresets, int selectedBuildPreset, boolean collectFluids) {
-        return new ToolkitSettings(requireExactItemMatch, chainLimit, swapRow, presets, selectedPreset,
-                allowBreakingOtherBlocks, buildPresets, selectedBuildPreset, collectFluids,
+        return new ToolkitSettings(requireExactItemMatch, chainLimit, this.chainBlacklist, swapRow, presets,
+                selectedPreset, allowBreakingOtherBlocks, buildPresets, selectedBuildPreset,
+                this.quickBuildDistance, collectFluids, this.recordContainerContents, this.swapMode,
+                this.cycleDirection);
+    }
+
+    /** 修改连锁破坏黑名单。 */
+    public ToolkitSettings withChainBlacklist(List<ResourceLocation> ids) {
+        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, ids, this.swapRow,
+                this.presets, this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets,
+                this.selectedBuildPreset, this.quickBuildDistance, this.collectFluids,
+                this.recordContainerContents, this.swapMode, this.cycleDirection);
+    }
+
+    /** 修改快速建造“默认位置”的远近（2-8 格）。 */
+    public ToolkitSettings withQuickBuildDistance(int distance) {
+        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.chainBlacklist, this.swapRow,
+                this.presets, this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets,
+                this.selectedBuildPreset, distance, this.collectFluids, this.recordContainerContents,
                 this.swapMode, this.cycleDirection);
+    }
+
+    /** 往黑名单里添加一个方块；已经在里面或已经满了就保持不变。 */
+    public ToolkitSettings withAddedChainBlacklist(ResourceLocation id) {
+        if (id == null || this.chainBlacklist.contains(id) || this.chainBlacklist.size() >= MAX_CHAIN_BLACKLIST) {
+            return this;
+        }
+        List<ResourceLocation> ids = new ArrayList<>(this.chainBlacklist);
+        ids.add(id);
+        return this.withChainBlacklist(ids);
+    }
+
+    /** 从黑名单里移除若干个方块。 */
+    public ToolkitSettings withRemovedChainBlacklist(Collection<ResourceLocation> removed) {
+        if (removed == null || removed.isEmpty() || this.chainBlacklist.isEmpty()) {
+            return this;
+        }
+        List<ResourceLocation> ids = new ArrayList<>(this.chainBlacklist);
+        if (!ids.removeAll(removed)) {
+            return this;
+        }
+        return this.withChainBlacklist(ids);
+    }
+
+    /** 这个方块是否在黑名单里（黑名单里的方块使用“预设连锁破坏方案”）。 */
+    public boolean isChainBlacklisted(Block block) {
+        if (block == null || this.chainBlacklist.isEmpty()) {
+            return false;
+        }
+        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
+        return id != null && this.chainBlacklist.contains(id);
+    }
+
+    /** 修改“记录容器内物品”。 */
+    public ToolkitSettings withRecordContainerContents(boolean value) {
+        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.chainBlacklist, this.swapRow,
+                this.presets, this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets,
+                this.selectedBuildPreset, this.quickBuildDistance, this.collectFluids, value, this.swapMode,
+                this.cycleDirection);
     }
 
     /** 修改物品切换模式。 */
     public ToolkitSettings withSwapMode(SwapMode mode) {
-        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
-                this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset,
-                this.collectFluids, mode, this.cycleDirection);
+        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.chainBlacklist, this.swapRow,
+                this.presets, this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets,
+                this.selectedBuildPreset, this.quickBuildDistance, this.collectFluids,
+                this.recordContainerContents, mode, this.cycleDirection);
     }
 
     /** 修改循环方向。 */
     public ToolkitSettings withCycleDirection(CycleDirection direction) {
-        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.swapRow, this.presets,
-                this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets, this.selectedBuildPreset,
-                this.collectFluids, this.swapMode, direction);
+        return new ToolkitSettings(this.requireExactItemMatch, this.chainLimit, this.chainBlacklist, this.swapRow,
+                this.presets, this.selectedPreset, this.allowBreakingOtherBlocks, this.buildPresets,
+                this.selectedBuildPreset, this.quickBuildDistance, this.collectFluids,
+                this.recordContainerContents, this.swapMode, direction);
     }
 
     public ToolkitSettings withRequireExactItemMatch(boolean value) {

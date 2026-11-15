@@ -6,6 +6,7 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
@@ -22,6 +23,8 @@ import net.minecraft.world.item.component.ItemContainerContents;
 public final class BlueprintBoxData {
     public static final String TAG_LIMITS = "Limits";
     public static final String TAG_BLUEPRINT = "Blueprint";
+    public static final String TAG_TANK = "Tank";
+    public static final String TAG_CONTENT_ITEMS = "ContentItems";
 
     private BlueprintBoxData() {
     }
@@ -125,7 +128,7 @@ public final class BlueprintBoxData {
         return !template.isEmpty() && ItemStack.isSameItemSameComponents(template, stack);
     }
 
-    /** 箱子里是否有足够材料（方块物品 + 容器内容物，精确匹配）。 */
+    /** 箱子里是否有足够材料（方块物品 + 储罐流体，精确匹配）。 */
     public static boolean hasEnoughItems(ItemStack stack, BlueprintData blueprint, int slots) {
         if (blueprint == null) {
             return false;
@@ -142,17 +145,74 @@ public final class BlueprintBoxData {
                 return false;
             }
         }
-        return true;
+        int tankCapacity = stack.getItem() instanceof BlueprintBoxItem boxItem ? boxItem.tier().tankCapacity() : 0;
+        return readTank(stack, tankCapacity).containsAll(blueprint.fluidRequirements());
     }
 
-    /** 写入蓝图 + 格子上限，不改动物品内容。 */
+    /** 写入蓝图 + 格子上限，保留储罐数据。 */
     public static void writeBlueprint(ItemStack stack, BlueprintData blueprint, int[] limits,
             HolderLookup.Provider registries) {
-        CompoundTag tag = new CompoundTag();
+        CompoundTag tag = getBlockEntityTag(stack);
         tag.putIntArray(TAG_LIMITS, limits);
         if (blueprint != null && !blueprint.isEmpty()) {
             tag.put(TAG_BLUEPRINT, blueprint.save(registries));
+        } else {
+            tag.remove(TAG_BLUEPRINT);
         }
+        BlockItem.setBlockEntityData(stack, BlueprintBoxes.BLUEPRINT_BOX_BE.get(), tag);
+    }
+
+    /** 读取储罐；没有储罐或没有数据时返回指定容量的空罐。 */
+    public static FluidTank readTank(ItemStack stack, int capacity) {
+        CompoundTag tag = getBlockEntityTag(stack);
+        if (capacity <= 0 || !tag.contains(TAG_TANK, Tag.TAG_COMPOUND)) {
+            return FluidTank.empty(Math.max(0, capacity));
+        }
+        return FluidTank.load(tag.getCompound(TAG_TANK), capacity);
+    }
+
+    /** 写入储罐，保留蓝图与格子上限。 */
+    public static void writeTank(ItemStack stack, FluidTank tank) {
+        CompoundTag tag = getBlockEntityTag(stack);
+        if (tank == null || tank.isEmpty()) {
+            tag.remove(TAG_TANK);
+        } else {
+            tag.put(TAG_TANK, tank.save());
+        }
+        BlockItem.setBlockEntityData(stack, BlueprintBoxes.BLUEPRINT_BOX_BE.get(), tag);
+    }
+
+    /** 读取第二栏（容器内容物）的物品。 */
+    public static NonNullList<ItemStack> readContentItems(ItemStack stack, int slots,
+            HolderLookup.Provider registries) {
+        NonNullList<ItemStack> items = NonNullList.withSize(Math.max(0, slots), ItemStack.EMPTY);
+        CompoundTag tag = getBlockEntityTag(stack);
+        ListTag list = tag.getList(TAG_CONTENT_ITEMS, Tag.TAG_COMPOUND);
+        for (int i = 0; i < list.size(); i++) {
+            CompoundTag stackTag = list.getCompound(i);
+            int slot = stackTag.getByte("Slot") & 255;
+            if (slot >= 0 && slot < items.size()) {
+                items.set(slot, ItemStack.parseOptional(registries, stackTag));
+            }
+        }
+        return items;
+    }
+
+    /** 写入第二栏（容器内容物）的物品，保留蓝图 / 储罐 / 格子上限。 */
+    public static void writeContentItems(ItemStack stack, List<ItemStack> items,
+            HolderLookup.Provider registries) {
+        CompoundTag tag = getBlockEntityTag(stack);
+        ListTag list = new ListTag();
+        for (int i = 0; i < items.size(); i++) {
+            ItemStack item = items.get(i);
+            if (item.isEmpty()) {
+                continue;
+            }
+            CompoundTag stackTag = (CompoundTag) item.save(registries);
+            stackTag.putByte("Slot", (byte) i);
+            list.add(stackTag);
+        }
+        tag.put(TAG_CONTENT_ITEMS, list);
         BlockItem.setBlockEntityData(stack, BlueprintBoxes.BLUEPRINT_BOX_BE.get(), tag);
     }
 

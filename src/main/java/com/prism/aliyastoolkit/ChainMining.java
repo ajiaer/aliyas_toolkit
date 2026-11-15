@@ -85,7 +85,8 @@ public final class ChainMining {
      * 从 {@code origin} 开始收集连锁破坏的方块列表（第一个元素是 origin 本身；
      * 如果 origin 是空气或液体方块、无法破坏，则返回空列表）。
      * <p>
-     * 石头、泥土、下界岩这类大量生成的方块（{@link ModBlockTags#CHAIN_VERTICAL_ONLY}）使用玩家当前选中的
+     * 石头、泥土、下界岩这类大量生成的方块（黑名单里的方块，见
+ * {@link ToolkitSettings#chainBlacklist()}）使用玩家当前选中的
      * {@link ChainPreset}（横截面 + 层数）计算，见 {@link #collectShapedChain}；
      * 其余方块按 3x3x3 连通搜索，见 {@link #collectConnectedChain}。
      * <p>
@@ -93,11 +94,20 @@ public final class ChainMining {
      */
     public static List<BlockPos> collectChain(BlockGetter level, BlockPos origin, BlockState originState,
             ToolkitSettings settings, Player player) {
-        if (originState.is(ModBlockTags.CHAIN_VERTICAL_ONLY)) {
+        if (usesPreset(originState, settings)) {
             return collectShapedChain(level, origin, originState, settings.preset(), player,
                     settings.allowBreakingOtherBlocks());
         }
         return collectConnectedChain(level, origin, originState, settings.chainLimit());
+    }
+
+    /**
+     * 这个方块是否使用“预设连锁破坏方案”（横截面 + 层数）。
+     * <p>
+     * 黑名单（{@link ToolkitSettings#chainBlacklist()}）里的方块使用预设方案，其余方块按 3x3x3 连通搜索。
+     */
+    public static boolean usesPreset(BlockState state, ToolkitSettings settings) {
+        return settings.isChainBlacklisted(state.getBlock());
     }
 
     /**
@@ -403,7 +413,7 @@ public final class ChainMining {
         try {
             Block originBlock = originState.getBlock();
             // 大量方块的“允许其它方块”开启时，连锁范围里与指向方块不同的方块也要破坏
-            Block expectedBlock = originState.is(ModBlockTags.CHAIN_VERTICAL_ONLY)
+            Block expectedBlock = usesPreset(originState, settings)
                     && settings.allowBreakingOtherBlocks() ? null : originBlock;
             List<ItemStack> collectedDrops = new ArrayList<>();
             int experience = 0;

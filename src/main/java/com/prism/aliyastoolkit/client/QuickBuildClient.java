@@ -18,10 +18,12 @@ import com.prism.aliyastoolkit.QuickBuild;
 import com.prism.aliyastoolkit.ToolkitSettings;
 import com.prism.aliyastoolkit.ToolkitSettingsCache;
 import com.prism.aliyastoolkit.network.CycleBuildPresetPayload;
+import com.prism.aliyastoolkit.network.QuickBuildDistancePayload;
 import com.prism.aliyastoolkit.network.QuickBuildPayload;
 
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderStateShard;
@@ -30,6 +32,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.ConnectionProtocol;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -275,7 +278,13 @@ public final class QuickBuildClient {
         }
     }
 
-    /** 按住快捷键滚动滚轮：切换建造预设（不循环）。 */
+    /**
+     * 处于快速建造状态时：
+     * <ul>
+     * <li>{@code Alt} + 滚轮切换建造预设（不循环）</li>
+     * <li>{@code Ctrl} + 滚轮调整“指示器没有指向方块时的默认位置”远近（2-8 格，默认 2）</li>
+     * </ul>
+     */
     @SubscribeEvent
     static void onMouseScroll(InputEvent.MouseScrollingEvent event) {
         Minecraft minecraft = Minecraft.getInstance();
@@ -285,11 +294,13 @@ public final class QuickBuildClient {
         if (!Config.ENABLE_QUICK_BUILD.getAsBoolean()) {
             return;
         }
-        if (!AliyasToolkitClient.QUICK_BUILD_KEY.isDown()) {
+        // 只有快速建造已经开启时才允许用滚轮切预设 / 调距离
+        if (!enabled) {
             return;
         }
-        // 只有快速建造已经开启时才允许用滚轮切换预设
-        if (!enabled) {
+        boolean alt = Screen.hasAltDown();
+        boolean control = Screen.hasControlDown();
+        if (!alt && !control) {
             return;
         }
         double delta = event.getScrollDeltaY();
@@ -297,8 +308,33 @@ public final class QuickBuildClient {
             return;
         }
         event.setCanceled(true);
-        scrolledWhileHeld = true;
-        switchPreset(minecraft, delta < 0.0D ? 1 : -1);
+        int direction = delta < 0.0D ? 1 : -1;
+        if (alt) {
+            switchPreset(minecraft, direction);
+        } else {
+            // 默认位置距离的滚轮方向与切预设相反：向上滚变远、向下滚变近
+            changeDefaultDistance(minecraft, -direction);
+        }
+    }
+
+    /** 调整“指示器没有指向方块时”的默认位置远近（2-8 格）。 */
+    private static void changeDefaultDistance(Minecraft minecraft, int direction) {
+        ToolkitSettings settings = ToolkitSettingsCache.get();
+        int next = Mth.clamp(settings.quickBuildDistance() + direction,
+                ToolkitSettings.MIN_BUILD_DISTANCE, ToolkitSettings.MAX_BUILD_DISTANCE);
+        if (next != settings.quickBuildDistance()) {
+            settings = settings.withQuickBuildDistance(next);
+            ToolkitSettingsCache.set(settings);
+            if (minecraft.getConnection() != null
+                    && NetworkRegistry.hasChannel(minecraft.getConnection().getConnection(),
+                            ConnectionProtocol.PLAY, QuickBuildDistancePayload.TYPE.id())) {
+                PacketDistributor.sendToServer(new QuickBuildDistancePayload(next));
+            }
+        }
+        if (minecraft.player != null) {
+            minecraft.player.displayClientMessage(
+                    Component.translatable("message.aliyastoolkit.build_distance", next), true);
+        }
     }
 
     private static void switchPreset(Minecraft minecraft, int direction) {
@@ -497,8 +533,9 @@ public final class QuickBuildClient {
         }
         Vec3 eye = player.getEyePosition(1.0F);
         Vec3 look = player.getViewVector(1.0F);
-        // 没有指向方块时：取指示器前方约 2 格的位置
-        BlockPos pos = BlockPos.containing(eye.add(look.scale(2.0D)));
+        // 没有指向方块时：取指示器前方“默认位置距离”格的位置（默认 2 格，可用 Ctrl + 滚轮调 2-8）
+        int distance = ToolkitSettingsCache.get().quickBuildDistance();
+        BlockPos pos = BlockPos.containing(eye.add(look.scale(distance)));
         return isReplaceable(minecraft.level, pos) ? pos.immutable() : null;
     }
 

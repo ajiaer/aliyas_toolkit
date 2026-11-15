@@ -20,6 +20,7 @@ import com.prism.aliyastoolkit.AliyasToolkitClient;
 import com.prism.aliyastoolkit.ChainMining;
 import com.prism.aliyastoolkit.Config;
 import com.prism.aliyastoolkit.CopyPaste;
+import com.prism.aliyastoolkit.ToolkitSettings;
 import com.prism.aliyastoolkit.ToolkitSettingsCache;
 import com.prism.aliyastoolkit.blueprint.BlueprintBoxData;
 import com.prism.aliyastoolkit.blueprint.BlueprintBoxItem;
@@ -147,6 +148,22 @@ public final class CopyPasteClient {
             "aliyastoolkit_copy_paste_outline_behind", RenderStateShard.NO_DEPTH_TEST, 2.0D);
     private static final RenderType OUTLINE_FRONT = createLineType(
             "aliyastoolkit_copy_paste_outline_front", RenderStateShard.LEQUAL_DEPTH_TEST, 2.0D);
+
+    /** 建造预览里的流体源：半透明色块。 */
+    private static final RenderType FLUID_PREVIEW = RenderType.create(
+            "aliyastoolkit_fluid_preview",
+            DefaultVertexFormat.POSITION_COLOR,
+            VertexFormat.Mode.QUADS,
+            1536,
+            false,
+            false,
+            RenderType.CompositeState.builder()
+                    .setShaderState(RenderStateShard.POSITION_COLOR_SHADER)
+                    .setTransparencyState(RenderStateShard.TRANSLUCENT_TRANSPARENCY)
+                    .setCullState(RenderStateShard.NO_CULL)
+                    .setDepthTestState(RenderStateShard.LEQUAL_DEPTH_TEST)
+                    .setWriteMaskState(RenderStateShard.COLOR_WRITE)
+                    .createCompositeState(false));
 
     /**
      * 低透明度方块虚影；颜色由 ColorModulator 控制。
@@ -822,12 +839,21 @@ public final class CopyPasteClient {
         }
 
         BlueprintCreatePayload payload = BlueprintCreatePayload.of(cut, positions);
-        boolean collectFluids = ToolkitSettingsCache.get().collectFluids();
+        ToolkitSettings settings = ToolkitSettingsCache.get();
+        boolean collectFluids = settings.collectFluids();
         BlueprintCapture.Result result = BlueprintCapture.capture(minecraft.level, payload.min(),
-                payload.offsets(), player, collectFluids);
-        if (cut && collectFluids && result.blueprint() != null
-                && result.blueprint().fluidSourceCount() > countEmptyBuckets(player)) {
-            result = BlueprintCapture.capture(minecraft.level, payload.min(), payload.offsets(), player, false);
+                payload.offsets(), player, collectFluids, settings.recordContainerContents());
+        if (cut && collectFluids && result.blueprint() != null) {
+            // 流体记录进蓝图箱的储罐；装不下时直接提示并放弃创建（不再跳过流体）。
+            int required = 0;
+            for (BlueprintData.FluidRequirement requirement : result.blueprint().fluidRequirements()) {
+                required += requirement.amount();
+            }
+            int tankCapacity = boxItem.tier().tankCapacity();
+            if (required > tankCapacity) {
+                message("message.aliyastoolkit.blueprint.not_enough_tank", required, tankCapacity);
+                return;
+            }
         }
         if (result.errorKey() != null || result.blueprint() == null) {
             if (result.skippedBlueprintBoxes() > 0) {
@@ -841,6 +867,13 @@ public final class CopyPasteClient {
         int capacity = boxItem.capacity();
         if (result.blueprint().createSlots(capacity).size() > capacity) {
             message("message.aliyastoolkit.blueprint.too_many_advanced");
+            return;
+        }
+        // 容器内容物必须完整放进第二栏：超了就提示并取消记录。
+        int contentCapacity = boxItem.tier().contentSlots();
+        int neededContentSlots = BlueprintData.slotCount(result.blueprint().containerRequirements());
+        if (neededContentSlots > contentCapacity) {
+            message("message.aliyastoolkit.blueprint.too_many_contents", neededContentSlots, contentCapacity);
             return;
         }
         if (minecraft.getConnection() == null || !NetworkRegistry.hasChannel(
@@ -1274,7 +1307,7 @@ public final class CopyPasteClient {
 
     @SubscribeEvent
     static void onRenderLevel(RenderLevelStageEvent event) {
-        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_BLOCK_ENTITIES) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_WEATHER) {
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();
@@ -1301,6 +1334,7 @@ public final class CopyPasteClient {
             if (mode == Mode.PLACING && !previewPositions.isEmpty()) {
                 renderGhostBlocks(poseStack, ghostBuffers, previewPositions, previewStates,
                         1.0F, 1.0F, 1.0F, 1.0F, true);
+                renderFluidSources(poseStack, ghostBuffers, previewPositions, previewStates);
             }
             // 绘制模式的选区范围只显示轮廓，不再复制区域方块虚影。
             // 这样和 Create 强力胶一致，也不会让 Iris 对整片虚影重新做一次光照/后处理。
@@ -1412,38 +1446,38 @@ public final class CopyPasteClient {
         GhostPreviewLevel ghostLevel = new GhostPreviewLevel(level, previewMap, fullBright);
 
         BlockRenderDispatcher dispatcher = Minecraft.getInstance().getBlockRenderer();
-        boolean hasEntityBlock = states.stream()
-                .anyMatch(state -> state.getRenderShape() == RenderShape.ENTITYBLOCK_ANIMATED);
 
-        if (hasEntityBlock) {
-            // 箱子等 ENTITYBLOCK_ANIMATED 虚影先写一遍深度，再半透明绘制：
-            // 被前表面挡住的箱内纹理/背面不会透出来。
-            RenderSystem.setShaderColor(red, green, blue, 1.0F);
-            RenderSystem.colorMask(false, false, false, false);
-            RenderSystem.depthMask(true);
-            RenderSystem.enableDepthTest();
-            RenderSystem.depthFunc(GL11.GL_ALWAYS);
-            try {
-                for (int i = 0; i < positions.size(); i++) {
-                    BlockState state = states.get(i);
-                    if (state.getRenderShape() != RenderShape.ENTITYBLOCK_ANIMATED) {
-                        continue;
-                    }
-                    BlockPos pos = positions.get(i);
-                    poseStack.pushPose();
-                    poseStack.translate(pos.getX(), pos.getY(), pos.getZ());
-                    if (!renderEntityBlockModel(state, pos, poseStack, buffers)) {
-                        dispatcher.renderSingleBlock(state, poseStack, buffers,
-                                LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, ModelData.EMPTY, GHOST_BLOCK);
-                    }
-                    poseStack.popPose();
+        // 深度预渲染：所有虚影先只写深度（不写颜色），LEQUAL 让每个像素留下最近的面。
+        // 这样箱子等实体方块只显示朝向相机的那一面，相邻虚影之间的内部面也会被挡住。
+        RenderSystem.setShaderColor(red, green, blue, 1.0F);
+        RenderSystem.colorMask(false, false, false, false);
+        RenderSystem.depthMask(true);
+        RenderSystem.enableDepthTest();
+        RenderSystem.depthFunc(GL11.GL_LEQUAL);
+        try {
+            for (int i = 0; i < positions.size(); i++) {
+                BlockState state = states.get(i);
+                if (state.getRenderShape() == RenderShape.INVISIBLE) {
+                    continue;
                 }
-                buffers.endBatch();
-            } finally {
-                RenderSystem.colorMask(true, true, true, true);
-                RenderSystem.depthFunc(GL11.GL_LEQUAL);
-                RenderSystem.depthMask(false);
+                BlockPos pos = positions.get(i);
+                poseStack.pushPose();
+                poseStack.translate(pos.getX(), pos.getY(), pos.getZ());
+                if (state.getRenderShape() == RenderShape.MODEL) {
+                    dispatcher.renderBatched(state, pos, ghostLevel, poseStack,
+                            buffers.getBuffer(GHOST_BLOCK), true, RandomSource.create(state.getSeed(pos)),
+                            ModelData.EMPTY, GHOST_BLOCK);
+                } else if (!renderEntityBlockModel(state, pos, poseStack, buffers)) {
+                    dispatcher.renderSingleBlock(state, poseStack, buffers,
+                            LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, ModelData.EMPTY, GHOST_BLOCK);
+                }
+                poseStack.popPose();
             }
+            buffers.endBatch();
+        } finally {
+            RenderSystem.colorMask(true, true, true, true);
+            RenderSystem.depthFunc(GL11.GL_LEQUAL);
+            RenderSystem.depthMask(false);
         }
 
         MultiBufferSource ghostEntityBuffers = renderType -> buffers.getBuffer(GhostRenderTypes.translucent(renderType));
@@ -1520,6 +1554,95 @@ public final class CopyPasteClient {
             // 某些模组方块实体渲染器依赖完整世界数据，失败时回退到 BEWLR / 普通模型
             return false;
         }
+    }
+
+    /**
+     * 建造预览里的流体源：按流体的实际颜色（贴图平均色 × 染色）画一个半透明方块，
+     * 上表面略低于整格，方便和水/岩浆源头对应起来。
+     */
+    private static void renderFluidSources(PoseStack poseStack, MultiBufferSource.BufferSource buffers,
+            List<BlockPos> positions, List<BlockState> states) {
+        if (positions.isEmpty() || positions.size() != states.size()) {
+            return;
+        }
+        List<BlockPos> fluidPositions = new ArrayList<>();
+        List<Integer> fluidColors = new ArrayList<>();
+        for (int i = 0; i < positions.size(); i++) {
+            BlockState state = states.get(i);
+            FluidState fluid = state.getFluidState();
+            if (!ChainMining.isFluidBlock(state) || !fluid.isSource()) {
+                continue;
+            }
+            fluidPositions.add(positions.get(i));
+            fluidColors.add(FluidTint.color(fluid.getType()));
+        }
+        if (fluidPositions.isEmpty()) {
+            return;
+        }
+
+        // 先只写深度（LEQUAL），保证每个像素留下最近的面，
+        // 这样流体块只显示朝向相机的那一面，不会看到背面的侧面。
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+        RenderSystem.colorMask(false, false, false, false);
+        RenderSystem.depthMask(true);
+        RenderSystem.enableDepthTest();
+        RenderSystem.depthFunc(GL11.GL_LEQUAL);
+        try {
+            VertexConsumer depthConsumer = buffers.getBuffer(FLUID_PREVIEW);
+            for (int i = 0; i < fluidPositions.size(); i++) {
+                int color = fluidColors.get(i);
+                renderFluidBox(poseStack, depthConsumer, fluidPositions.get(i),
+                        ((color >> 16) & 0xFF) / 255.0F, ((color >> 8) & 0xFF) / 255.0F,
+                        (color & 0xFF) / 255.0F, 1.0F);
+            }
+            buffers.endBatch(FLUID_PREVIEW);
+        } finally {
+            RenderSystem.colorMask(true, true, true, true);
+            RenderSystem.depthMask(false);
+            RenderSystem.depthFunc(GL11.GL_LEQUAL);
+        }
+
+        VertexConsumer consumer = buffers.getBuffer(FLUID_PREVIEW);
+        for (int i = 0; i < fluidPositions.size(); i++) {
+            int color = fluidColors.get(i);
+            renderFluidBox(poseStack, consumer, fluidPositions.get(i),
+                    ((color >> 16) & 0xFF) / 255.0F, ((color >> 8) & 0xFF) / 255.0F,
+                    (color & 0xFF) / 255.0F, 0.55F);
+        }
+        buffers.endBatch(FLUID_PREVIEW);
+    }
+
+    /** 画一个流体色块：上表面 + 四个侧面，高度 0.9 格。 */
+    private static void renderFluidBox(PoseStack poseStack, VertexConsumer consumer, BlockPos pos,
+            float red, float green, float blue, float alpha) {
+        float x0 = pos.getX();
+        float z0 = pos.getZ();
+        float x1 = x0 + 1.0F;
+        float z1 = z0 + 1.0F;
+        float y0 = pos.getY();
+        float top = y0 + 0.9F;
+        addQuad(poseStack, consumer, x0, top, z0, x1, top, z0, x1, top, z1, x0, top, z1,
+                0.0F, 1.0F, 0.0F, red, green, blue, alpha);
+        addQuad(poseStack, consumer, x0, y0, z0, x1, y0, z0, x1, top, z0, x0, top, z0,
+                0.0F, 0.0F, -1.0F, red, green, blue, alpha);
+        addQuad(poseStack, consumer, x0, y0, z1, x1, y0, z1, x1, top, z1, x0, top, z1,
+                0.0F, 0.0F, 1.0F, red, green, blue, alpha);
+        addQuad(poseStack, consumer, x0, y0, z0, x0, y0, z1, x0, top, z1, x0, top, z0,
+                -1.0F, 0.0F, 0.0F, red, green, blue, alpha);
+        addQuad(poseStack, consumer, x1, y0, z0, x1, y0, z1, x1, top, z1, x1, top, z0,
+                1.0F, 0.0F, 0.0F, red, green, blue, alpha);
+    }
+
+    private static void addQuad(PoseStack poseStack, VertexConsumer consumer,
+            float x1, float y1, float z1, float x2, float y2, float z2,
+            float x3, float y3, float z3, float x4, float y4, float z4,
+            float normalX, float normalY, float normalZ,
+            float red, float green, float blue, float alpha) {
+        PoseStack.Pose pose = poseStack.last();
+        consumer.addVertex(pose, x1, y1, z1).setColor(red, green, blue, alpha).setNormal(pose, normalX, normalY, normalZ);
+        consumer.addVertex(pose, x2, y2, z2).setColor(red, green, blue, alpha).setNormal(pose, normalX, normalY, normalZ);
+        consumer.addVertex(pose, x3, y3, z3).setColor(red, green, blue, alpha).setNormal(pose, normalX, normalY, normalZ);
+        consumer.addVertex(pose, x4, y4, z4).setColor(red, green, blue, alpha).setNormal(pose, normalX, normalY, normalZ);
     }
 
     /** 画一条 1 格长的线。 */

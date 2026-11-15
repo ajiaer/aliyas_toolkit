@@ -7,10 +7,14 @@ import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.prism.aliyastoolkit.blueprint.BlueprintBoxView;
+import com.prism.aliyastoolkit.blueprint.BlueprintData;
+import com.prism.aliyastoolkit.blueprint.FluidTank;
 import com.prism.aliyastoolkit.menu.BlueprintBoxMenu;
 import com.prism.aliyastoolkit.menu.BlueprintSlot;
 import com.prism.aliyastoolkit.network.BlueprintBoxActionPayload;
 import com.prism.aliyastoolkit.network.BlueprintScrollPayload;
+import com.prism.aliyastoolkit.network.BlueprintTankPayload;
+import com.prism.aliyastoolkit.network.BlueprintViewModePayload;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -23,12 +27,15 @@ import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.Sheets;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.resources.model.BakedModel;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.material.Fluid;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import org.lwjgl.opengl.GL11;
@@ -70,9 +77,19 @@ public class BlueprintBoxScreen extends AbstractContainerScreen<BlueprintBoxMenu
     /** 从主面板最后 4 像素开始覆盖它的右边框，避免中间留下一条黑色竖缝。 */
     private static final int EXTENSION_X = 172;
     /** 与滚动条右侧留 4 像素间距。 */
-    private static final int BUTTON_X = 192;
-    private static final int BUTTON_WIDTH = 66;
+    private static final int BUTTON_X = 184;
+    private static final int BUTTON_WIDTH = 52;
     private static final int BUTTON_HEIGHT = 20;
+    /** 储罐刻度条：竖着放在原来的按钮位置。 */
+    private static final int TANK_X = 214;
+    private static final int TANK_WIDTH = 22;
+    /** 内容切换按钮（凸起 / 凹下），正方形，放在储罐左边。 */
+    private static final int TOGGLE_X = 192;
+    private static final int TOGGLE_WIDTH = 18;
+    private static final int TOGGLE_HEIGHT = 18;
+    /** 创造模式物品栏右侧使用的滚动条精灵。 */
+    private static final ResourceLocation CREATIVE_SCROLLER =
+            ResourceLocation.withDefaultNamespace("container/creative_inventory/scroller");
     private static final int SCROLL_X = 175;
     private static final int SCROLL_WIDTH = 12;
     private static final int SCROLL_HEIGHT = 15;
@@ -81,13 +98,12 @@ public class BlueprintBoxScreen extends AbstractContainerScreen<BlueprintBoxMenu
     private static final int SCROLL_TRACK_WIDTH = 14;
     /** 滑槽的深色内边框。 */
     private static final int SCROLL_TRACK_DARK = 0xFF373737;
-    /** 创造模式物品栏右侧使用的滚动条精灵。 */
-    private static final ResourceLocation CREATIVE_SCROLLER =
-            ResourceLocation.withDefaultNamespace("container/creative_inventory/scroller");
 
     private final BlueprintBoxView box;
     private final int visibleRows;
     private boolean draggingScroll;
+    /** 切换按钮状态：false = 箱子里已放入的材料，true = 蓝图内容器里的物品。 */
+    private boolean showContainerItems;
 
     public BlueprintBoxScreen(BlueprintBoxMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
@@ -104,7 +120,8 @@ public class BlueprintBoxScreen extends AbstractContainerScreen<BlueprintBoxMenu
         super.init();
         int x = this.leftPos;
         int y = this.topPos;
-        int firstButtonY = y + SLOT_Y + 8;
+        // 三个按钮移到物品栏右边：原来在箱子格子上方，现在整体下移到玩家背包那一行开始处。
+        int firstButtonY = y + SLOT_Y + this.visibleRows * 18 + 14;
         this.addRenderableWidget(Button.builder(Component.translatable("gui.aliyastoolkit.blueprint.clear"),
                 button -> this.sendAction(BlueprintBoxActionPayload.CLEAR_BLUEPRINT))
                 .bounds(x + BUTTON_X, firstButtonY, BUTTON_WIDTH, BUTTON_HEIGHT)
@@ -148,13 +165,27 @@ public class BlueprintBoxScreen extends AbstractContainerScreen<BlueprintBoxMenu
         drawExtension(guiGraphics, left + EXTENSION_X, top,
                 this.imageWidth - EXTENSION_X, this.imageHeight);
 
+        // 第二栏的行数按“内容容量”显示：超出内容容量的行整段盖成面板底色，
+        // 看起来只有内容容量那么多行（第一栏仍是箱子容量对应的行数）。
+        // 盖的时候连最后一行格子下面的 2 像素缝隙和边框一起盖掉，不在下面留黑边。
+        int activeRows = this.menu.getVisibleRowsForView();
+        if (activeRows < this.visibleRows) {
+            int bandTop = top + SLOT_Y + activeRows * 18 - 2;
+            int bandBottom = top + SLOT_Y - 1 + this.visibleRows * 18;
+            // 左右各留 1 像素，保留面板自己的边框。
+            guiGraphics.fill(left + 1, bandTop, left + MAIN_WIDTH - 1, bandBottom, PANEL_COLOR);
+        }
+
         int visibleSlots = this.menu.getVisibleSlots();
         for (int i = 0; i < visibleSlots; i++) {
             Slot slot = this.menu.slots.get(i);
+            if (!slot.isActive()) {
+                // 超出当前栏容量的行不画占位、不画禁用覆盖层，也不接受交互。
+                continue;
+            }
             int slotX = left + slot.x;
             int slotY = top + slot.y;
-            int limit = this.box.getLimit(slot instanceof BlueprintSlot blueprintSlot
-                    ? blueprintSlot.getContainerSlot() : i);
+            int limit = slot instanceof BlueprintSlot blueprintSlot ? blueprintSlot.getLimit() : this.box.getLimit(i);
             if (limit <= 0) {
                 // 禁用槽位由 renderSlot 使用合成器的禁用槽位覆盖层绘制。
                 continue;
@@ -170,6 +201,8 @@ public class BlueprintBoxScreen extends AbstractContainerScreen<BlueprintBoxMenu
             }
         }
 
+        this.renderTank(guiGraphics, mouseX, mouseY);
+        this.renderViewToggle(guiGraphics, mouseX, mouseY);
         this.renderScrollbar(guiGraphics);
     }
 
@@ -254,6 +287,186 @@ public class BlueprintBoxScreen extends AbstractContainerScreen<BlueprintBoxMenu
         guiGraphics.fill(x, bottom - 1, right, bottom, BORDER_BLACK);
     }
 
+    /** 储罐里的一段流体：存量、蓝图需求、以及这一段在屏幕上的位置。 */
+    private record TankSegment(Fluid fluid, int stored, int required, int bottomY, int height) {
+    }
+
+    /**
+     * 储罐刻度条：按容量从下往上分段。
+     * <p>
+     * 每段先画“蓝图需求”的浅色（占位），再画实际存量的实色；鼠标悬停的那一段左右各加宽 2 像素。
+     */
+    private void renderTank(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        int capacity = this.box.getTankCapacity();
+        if (capacity <= 0) {
+            return;
+        }
+        int x = this.leftPos + TANK_X;
+        int y = this.topPos + SLOT_Y;
+        int width = TANK_WIDTH;
+        int height = this.visibleRows * 18;
+
+        guiGraphics.fill(x, y, x + width, y + height, SLOT_FILL);
+
+        List<TankSegment> segments = this.tankSegments(capacity, height);
+        int hovered = this.tankSegmentAt(segments, mouseX, mouseY);
+        for (int i = 0; i < segments.size(); i++) {
+            TankSegment segment = segments.get(i);
+            int color = fluidColor(segment.fluid());
+            int solidTop = segment.bottomY() - Math.round((float) segment.stored() / capacity * height);
+            int bandTop = segment.bottomY() - segment.height();
+            boolean highlighted = i == hovered;
+            int left = highlighted ? x - 2 : x;
+            int right = highlighted ? x + width + 2 : x + width;
+            if (bandTop < solidTop) {
+                // 占位：还没有对应流体时显示该流体的浅色
+                guiGraphics.fill(left, bandTop, right, solidTop, withAlpha(color, 0x55));
+            }
+            if (solidTop < segment.bottomY()) {
+                guiGraphics.fill(left, solidTop, right, segment.bottomY(), withAlpha(color, 0xFF));
+            }
+        }
+
+        // 边框最后画：左上 1 像素黑边、右下 1 像素白边（原版凹槽的立体感），不再画最外层黑框。
+        guiGraphics.fill(x, y, x + width, y + 1, BORDER_BLACK);
+        guiGraphics.fill(x, y, x + 1, y + height, BORDER_BLACK);
+        guiGraphics.fill(x, y + height - 1, x + width, y + height, BORDER_LIGHT);
+        guiGraphics.fill(x + width - 1, y, x + width, y + height, BORDER_LIGHT);
+    }
+
+    /** 从下往上分段：先是蓝图需要的流体，再是储罐里多出来的流体。 */
+    private List<TankSegment> tankSegments(int capacity, int height) {
+        java.util.LinkedHashMap<Fluid, int[]> amounts = new java.util.LinkedHashMap<>();
+        BlueprintData blueprint = this.box.getBlueprint();
+        if (blueprint != null) {
+            for (BlueprintData.FluidRequirement requirement : blueprint.fluidRequirements()) {
+                amounts.computeIfAbsent(requirement.fluid(), key -> new int[2])[1] += requirement.amount();
+            }
+        }
+        for (var entry : this.box.getTank().contents().entrySet()) {
+            amounts.computeIfAbsent(entry.getKey(), key -> new int[2])[0] += entry.getValue();
+        }
+        List<TankSegment> segments = new ArrayList<>();
+        int bottom = this.topPos + SLOT_Y + height;
+        for (var entry : amounts.entrySet()) {
+            int stored = entry.getValue()[0];
+            int required = entry.getValue()[1];
+            int band = Math.max(stored, required);
+            if (band <= 0) {
+                continue;
+            }
+            int segmentHeight = Math.max(1, Math.round((float) band / capacity * height));
+            segments.add(new TankSegment(entry.getKey(), stored, required, bottom, segmentHeight));
+            bottom -= segmentHeight;
+        }
+        return segments;
+    }
+
+    private int tankSegmentAt(List<TankSegment> segments, int mouseX, int mouseY) {
+        int x = this.leftPos + TANK_X;
+        if (mouseX < x - 2 || mouseX >= x + TANK_WIDTH + 2) {
+            return -1;
+        }
+        for (int i = 0; i < segments.size(); i++) {
+            TankSegment segment = segments.get(i);
+            if (mouseY >= segment.bottomY() - segment.height() && mouseY < segment.bottomY()) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** 内容切换按钮：原版风格的小方按钮，中间一个箱子图标；凸起 = 箱内材料，按下 = 容器物品。 */
+    private void renderViewToggle(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        int x = this.leftPos + TOGGLE_X;
+        int y = this.topPos + SLOT_Y;
+        boolean pressed = this.showContainerItems;
+        drawButtonFrame(guiGraphics, x, y, TOGGLE_WIDTH, TOGGLE_HEIGHT, pressed);
+        int iconX = x + (TOGGLE_WIDTH - 16) / 2;
+        int iconY = y + (TOGGLE_HEIGHT - 16) / 2 - 1 + (pressed ? 1 : 0);
+        guiGraphics.renderItem(new ItemStack(Items.CHEST), iconX, iconY);
+    }
+
+    /** 原版按钮的斜面：凸起时左上白、右下深灰；按下时反过来。 */
+    private static void drawButtonFrame(GuiGraphics guiGraphics, int x, int y, int width, int height,
+            boolean pressed) {
+        int highlight = pressed ? 0xFF555555 : 0xFFFFFFFF;
+        int shadow = pressed ? 0xFFFFFFFF : 0xFF555555;
+        guiGraphics.fill(x, y, x + width, y + height, PANEL_COLOR);
+        guiGraphics.fill(x, y, x + width, y + 1, highlight);
+        guiGraphics.fill(x, y, x + 1, y + height, highlight);
+        guiGraphics.fill(x, y + height - 1, x + width, y + height, shadow);
+        guiGraphics.fill(x + width - 1, y, x + width, y + height, shadow);
+        if (pressed) {
+            guiGraphics.fill(x, y, x + width, y + height, 0x22000000);
+        }
+    }
+
+    private boolean isOnToggle(double mouseX, double mouseY) {
+        int x = this.leftPos + TOGGLE_X;
+        int y = this.topPos + SLOT_Y;
+        return mouseX >= x && mouseX < x + TOGGLE_WIDTH && mouseY >= y && mouseY < y + TOGGLE_HEIGHT + 1;
+    }
+
+    private boolean isOnTank(double mouseX, double mouseY) {
+        if (this.box.getTankCapacity() <= 0) {
+            return false;
+        }
+        int x = this.leftPos + TANK_X;
+        int y = this.topPos + SLOT_Y;
+        return mouseX >= x - 2 && mouseX < x + TANK_WIDTH + 2
+                && mouseY >= y && mouseY < y + this.visibleRows * 18;
+    }
+
+    private boolean isOverBlueprintSlot(double mouseX, double mouseY) {
+        for (int i = 0; i < this.menu.getVisibleSlots(); i++) {
+            Slot slot = this.menu.slots.get(i);
+            if (slot instanceof BlueprintSlot
+                    && mouseX >= this.leftPos + slot.x && mouseX < this.leftPos + slot.x + 16
+                    && mouseY >= this.topPos + slot.y && mouseY < this.topPos + slot.y + 16) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 桶与储罐交互：空桶按悬停位置取液，液体桶任意位置存入。 */
+    private void clickTank(double mouseX, double mouseY) {
+        int capacity = this.box.getTankCapacity();
+        if (capacity <= 0) {
+            return;
+        }
+        ItemStack carried = this.menu.getCarried();
+        if (carried.isEmpty()) {
+            return;
+        }
+        if (carried.is(Items.BUCKET)) {
+            List<TankSegment> segments = this.tankSegments(capacity, this.visibleRows * 18);
+            int hovered = this.tankSegmentAt(segments, (int) mouseX, (int) mouseY);
+            if (hovered < 0) {
+                return;
+            }
+            ResourceLocation id = BuiltInRegistries.FLUID.getKey(segments.get(hovered).fluid());
+            if (id == null) {
+                return;
+            }
+            PacketDistributor.sendToServer(new BlueprintTankPayload(this.menu.getReference(),
+                    BlueprintTankPayload.EXTRACT, id.toString()));
+            return;
+        }
+        PacketDistributor.sendToServer(new BlueprintTankPayload(this.menu.getReference(),
+                BlueprintTankPayload.INSERT, ""));
+    }
+
+    /** 流体颜色（取流体贴图的平均色并乘上染色值，兜底白色）。 */
+    private static int fluidColor(Fluid fluid) {
+        return FluidTint.color(fluid);
+    }
+
+    private static int withAlpha(int color, int alpha) {
+        return (alpha << 24) | (color & 0xFFFFFF);
+    }
+
     private void renderScrollbar(GuiGraphics guiGraphics) {
         int maxScroll = this.menu.getMaxScroll();
         if (maxScroll <= 0) {
@@ -277,6 +490,10 @@ public class BlueprintBoxScreen extends AbstractContainerScreen<BlueprintBoxMenu
 
     @Override
     public void renderSlot(GuiGraphics guiGraphics, Slot slot) {
+        if (!slot.isActive()) {
+            // 超出当前栏容量的行整行不画（占位、禁用覆盖层、高亮都不画）。
+            return;
+        }
         if (slot instanceof BlueprintSlot blueprintSlot && blueprintSlot.isDisabled()) {
             // 与合成器一致：用禁用槽位精灵把整个 18×18 格子“盖住”。
             guiGraphics.blitSprite(CRAFTER_DISABLED_SLOT, slot.x - 1, slot.y - 1, 18, 18);
@@ -313,8 +530,35 @@ public class BlueprintBoxScreen extends AbstractContainerScreen<BlueprintBoxMenu
 
     @Override
     protected void renderTooltip(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        Slot hovered = this.getSlotUnderMouse();
-        if (this.menu.getCarried().isEmpty() && hovered instanceof BlueprintSlot blueprintSlot) {
+        // 储罐：显示流体名称、现存量与蓝图需求
+        int tankCapacity = this.box.getTankCapacity();
+        if (tankCapacity > 0) {
+            List<TankSegment> segments = this.tankSegments(tankCapacity, this.visibleRows * 18);
+            int hovered = this.tankSegmentAt(segments, mouseX, mouseY);
+            if (hovered >= 0) {
+                TankSegment segment = segments.get(hovered);
+                List<Component> lines = new ArrayList<>();
+                lines.add(segment.fluid().getFluidType().getDescription());
+                lines.add(Component.translatable("gui.aliyastoolkit.blueprint.tank.amount",
+                        segment.stored(), tankCapacity));
+                if (segment.required() > 0) {
+                    lines.add(Component.translatable("gui.aliyastoolkit.blueprint.tank.required",
+                            segment.required()));
+                }
+                guiGraphics.renderComponentTooltip(this.font, lines, mouseX, mouseY);
+                return;
+            }
+        }
+        // 内容切换按钮
+        if (this.isOnToggle(mouseX, mouseY)) {
+            guiGraphics.renderTooltip(this.font, Component.translatable(this.showContainerItems
+                    ? "gui.aliyastoolkit.blueprint.view.contents"
+                    : "gui.aliyastoolkit.blueprint.view.box"), mouseX, mouseY);
+            return;
+        }
+        // 第二栏：显示容器内物品的占位说明
+        Slot hoveredSlot = this.getSlotUnderMouse();
+        if (this.menu.getCarried().isEmpty() && hoveredSlot instanceof BlueprintSlot blueprintSlot) {
             // 空占位显示对应物品的说明；已放入的物品也走这里，避免某些槽位不显示原版 tooltip。
             ItemStack display = blueprintSlot.getItem();
             if (display.isEmpty() && blueprintSlot.getLimit() > 0) {
@@ -345,6 +589,17 @@ public class BlueprintBoxScreen extends AbstractContainerScreen<BlueprintBoxMenu
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0 && this.isOnToggle(mouseX, mouseY)) {
+            this.showContainerItems = !this.showContainerItems;
+            this.menu.setViewMode(this.showContainerItems ? 1 : 0);
+            PacketDistributor.sendToServer(new BlueprintViewModePayload(this.menu.getReference(),
+                    this.menu.getViewMode()));
+            return true;
+        }
+        if (button == 0 && this.isOnTank(mouseX, mouseY)) {
+            this.clickTank(mouseX, mouseY);
+            return true;
+        }
         if (button == 0 && this.menu.getMaxScroll() > 0 && this.isOnScrollbar(mouseX, mouseY)) {
             this.draggingScroll = true;
             this.scrollToMouse(mouseY);

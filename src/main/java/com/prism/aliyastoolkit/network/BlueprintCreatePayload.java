@@ -13,6 +13,7 @@ import com.prism.aliyastoolkit.blueprint.BlueprintBoxData;
 import com.prism.aliyastoolkit.blueprint.BlueprintBoxItem;
 import com.prism.aliyastoolkit.blueprint.BlueprintCapture;
 import com.prism.aliyastoolkit.blueprint.BlueprintData;
+import com.prism.aliyastoolkit.blueprint.FluidTank;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -22,8 +23,8 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Containers;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.Container;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -133,31 +134,38 @@ public record BlueprintCreatePayload(boolean cut, BlockPos min, List<BlockPos> o
             ToolkitSettings settings = player.getData(AliyasToolkit.SETTINGS);
             boolean collectFluids = settings.collectFluids();
             BlueprintCapture.Result result = BlueprintCapture.capture(level, payload.min(), payload.offsets(), player,
-                    collectFluids);
+                    collectFluids, settings.recordContainerContents());
             if (result.errorKey() != null || result.blueprint() == null) {
                 player.displayClientMessage(Component.translatable(result.errorKey() == null
                         ? "message.aliyastoolkit.copy_paste_no_blocks" : result.errorKey()), true);
                 return;
             }
             BlueprintData blueprint = result.blueprint();
-            int fluidCount = blueprint.fluidSourceCount();
+            List<BlueprintData.FluidRequirement> fluidRequirements = blueprint.fluidRequirements();
             int skippedFluidSources = 0;
-            if (payload.cut() && fluidCount > 0) {
-                int emptyBuckets = countEmptyBuckets(player);
-                if (emptyBuckets < fluidCount) {
-                    skippedFluidSources = fluidCount;
-                    // 空桶不足时不取消记录，只是跳过流体源头。
-                    result = BlueprintCapture.capture(level, payload.min(), payload.offsets(), player, false);
-                    if (result.errorKey() != null || result.blueprint() == null) {
-                        player.displayClientMessage(Component.translatable(
-                                "message.aliyastoolkit.blueprint.not_enough_buckets", fluidCount, emptyBuckets), true);
-                        return;
-                    }
-                    blueprint = result.blueprint();
-                    fluidCount = 0;
+            int tankCapacity = boxItem.tier().tankCapacity();
+            if (payload.cut() && !fluidRequirements.isEmpty()) {
+                int requiredTank = 0;
+                for (BlueprintData.FluidRequirement requirement : fluidRequirements) {
+                    requiredTank += requirement.amount();
+                }
+                // 储罐装不下时不创建蓝图（不再跳过流体）。
+                if (tankCapacity < requiredTank) {
+                    player.displayClientMessage(Component.translatable(
+                            "message.aliyastoolkit.blueprint.not_enough_tank", requiredTank, tankCapacity), true);
+                    return;
                 }
             }
             int capacity = boxItem.capacity();
+            int contentCapacity = boxItem.tier().contentSlots();
+            // 容器内容物必须完整放进第二栏：不截断、不跳过，避免物品散落或机器内部数量对不上。
+            int neededContentSlots = BlueprintData.slotCount(blueprint.containerRequirements());
+            if (neededContentSlots > contentCapacity) {
+                player.displayClientMessage(Component.translatable(
+                        "message.aliyastoolkit.blueprint.too_many_contents", neededContentSlots, contentCapacity),
+                        true);
+                return;
+            }
             List<BlueprintData.SlotDef> slotDefs = blueprint.createSlots(capacity);
             if (slotDefs.size() > capacity) {
                 player.displayClientMessage(
@@ -177,20 +185,42 @@ public record BlueprintCreatePayload(boolean cut, BlockPos min, List<BlockPos> o
                     }
                 }
             }
-            if (payload.cut() && fluidCount > 0) {
-                consumeEmptyBuckets(player, fluidCount);
+            // 第二栏（容器内容物）：已经校验过能完整放下，这里把记录到的物品全部放进去。
+            List<ItemStack> contentItems = new ArrayList<>(contentCapacity);
+            List<BlueprintData.SlotDef> contentDefs = blueprint.createContentSlots(contentCapacity);
+            for (int i = 0; i < contentCapacity; i++) {
+                contentItems.add(ItemStack.EMPTY);
+                if (payload.cut() && i < contentDefs.size()) {
+                    BlueprintData.SlotDef def = contentDefs.get(i);
+                    contentItems.set(i, def.template().copyWithCount(def.limit()));
+                }
+            }
+            if (payload.cut() && !fluidRequirements.isEmpty()) {
+                FluidTank tank = FluidTank.empty(tankCapacity);
+                for (BlueprintData.FluidRequirement requirement : fluidRequirements) {
+                    tank.fill(requirement.fluid(), requirement.amount());
+                }
+                BlueprintBoxData.writeTank(held, tank);
             }
             BlueprintBoxData.writeAll(held, items, limits, blueprint, level.registryAccess());
+            if (payload.cut()) {
+                BlueprintBoxData.writeContentItems(held, contentItems, level.registryAccess());
+            }
 
             if (payload.cut()) {
                 // 蓝图已经保存了源方块（包括容器内容）的完整数据，移除时不再额外掉一份。
                 BlueprintData finalBlueprint = blueprint;
+                boolean recordContents = settings.recordContainerContents();
                 BlueprintBoxBlock.withDropsSuppressed(() -> {
                     for (BlueprintData.Entry entry : finalBlueprint.entries()) {
                         BlockPos pos = payload.min().offset(entry.x(), entry.y(), entry.z());
                         // 先清空并移除方块实体，避免箱子等容器在 setBlock 时把内容物再掉一份。
                         var blockEntity = level.getBlockEntity(pos);
                         if (blockEntity instanceof Container container) {
+                            if (!recordContents) {
+                                // 关闭“记录容器内物品”时内容没有进蓝图，直接掉在原地，避免凭空消失。
+                                Containers.dropContents(level, pos, container);
+                            }
                             container.clearContent();
                         }
                         if (blockEntity != null) {
@@ -223,42 +253,6 @@ public record BlueprintCreatePayload(boolean cut, BlockPos min, List<BlockPos> o
                         true);
             }
         });
-    }
-
-    /** 主物品栏 + 快捷栏里空桶的数量。 */
-    private static int countEmptyBuckets(ServerPlayer player) {
-        int count = 0;
-        for (int slot = 0; slot < 36; slot++) {
-            ItemStack stack = player.getInventory().getItem(slot);
-            if (stack.is(Items.BUCKET)) {
-                count += stack.getCount();
-            }
-        }
-        ItemStack offhand = player.getOffhandItem();
-        if (offhand.is(Items.BUCKET)) {
-            count += offhand.getCount();
-        }
-        return count;
-    }
-
-    /** 从主物品栏 + 快捷栏 + 副手消耗指定数量的空桶。 */
-    private static void consumeEmptyBuckets(ServerPlayer player, int amount) {
-        int remaining = amount;
-        for (int slot = 0; slot < 36 && remaining > 0; slot++) {
-            ItemStack stack = player.getInventory().getItem(slot);
-            if (!stack.is(Items.BUCKET)) {
-                continue;
-            }
-            int take = Math.min(remaining, stack.getCount());
-            player.getInventory().removeItem(slot, take);
-            remaining -= take;
-        }
-        if (remaining > 0) {
-            ItemStack offhand = player.getOffhandItem();
-            if (offhand.is(Items.BUCKET)) {
-                offhand.shrink(Math.min(remaining, offhand.getCount()));
-            }
-        }
     }
 }
 

@@ -10,6 +10,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
@@ -39,7 +40,10 @@ import com.prism.aliyastoolkit.menu.BlueprintBoxMenu;
  */
 public class BlueprintBoxBlockEntity extends ChestBlockEntity implements WorldlyContainer, BlueprintBoxView {
     private NonNullList<ItemStack> items;
+    /** 第二栏：蓝图内容器里的物品（允许缺货，建造时有多少放多少）。 */
+    private NonNullList<ItemStack> contentItems;
     private int[] limits;
+    private FluidTank tank;
     @Nullable
     private BlueprintData blueprint;
     private List<BlueprintData.SlotDef> slotDefs = List.of();
@@ -48,7 +52,9 @@ public class BlueprintBoxBlockEntity extends ChestBlockEntity implements Worldly
         super(type, pos, state);
         int slots = slotCount(state);
         this.items = NonNullList.withSize(slots, ItemStack.EMPTY);
+        this.contentItems = NonNullList.withSize(contentSlotCount(state), ItemStack.EMPTY);
         this.limits = new int[slots];
+        this.tank = FluidTank.empty(tankCapacity(state));
     }
 
     public BlueprintBoxBlockEntity(BlockPos pos, BlockState state) {
@@ -57,6 +63,15 @@ public class BlueprintBoxBlockEntity extends ChestBlockEntity implements Worldly
 
     private static int slotCount(BlockState state) {
         return state.getBlock() instanceof BlueprintBoxBlock box ? box.tier().slots() : BlueprintTier.LAPIS.slots();
+    }
+
+    private static int tankCapacity(BlockState state) {
+        return state.getBlock() instanceof BlueprintBoxBlock box ? box.tier().tankCapacity() : 0;
+    }
+
+    private static int contentSlotCount(BlockState state) {
+        return state.getBlock() instanceof BlueprintBoxBlock box ? box.tier().contentSlots()
+                : BlueprintTier.LAPIS.contentSlots();
     }
 
     public BlueprintTier tier() {
@@ -94,6 +109,75 @@ public class BlueprintBoxBlockEntity extends ChestBlockEntity implements Worldly
     @Override
     public int getCapacity() {
         return this.items.size();
+    }
+
+    @Override
+    public int getContentCapacity() {
+        return this.tier().contentSlots();
+    }
+
+    @Override
+    public int getTankCapacity() {
+        return this.tier().tankCapacity();
+    }
+
+    @Override
+    public FluidTank getTank() {
+        if (this.tank == null) {
+            this.tank = FluidTank.empty(this.getTankCapacity());
+        }
+        return this.tank;
+    }
+
+    @Override
+    public void setTank(FluidTank tank) {
+        this.tank = tank == null ? FluidTank.empty(this.getTankCapacity()) : tank;
+        this.setChanged();
+        this.syncToClient();
+    }
+
+    @Override
+    public ItemStack getContentItem(int slot) {
+        return slot >= 0 && slot < this.contentItems.size() ? this.contentItems.get(slot) : ItemStack.EMPTY;
+    }
+
+    @Override
+    public void setContentItem(int slot, ItemStack stack) {
+        if (slot < 0 || slot >= this.contentItems.size() || isNestedBlueprintBox(stack)) {
+            return;
+        }
+        int limit = this.getContentLimit(slot);
+        BlueprintData.SlotDef def = this.getContentSlotDef(slot);
+        if (limit <= 0 || def == null) {
+            if (stack.isEmpty()) {
+                this.contentItems.set(slot, ItemStack.EMPTY);
+                this.setChanged();
+            }
+            return;
+        }
+        if (!stack.isEmpty() && !def.matches(stack)) {
+            return;
+        }
+        ItemStack stored = stack.getCount() > limit ? stack.copyWithCount(limit) : stack;
+        this.contentItems.set(slot, stored);
+        this.setChanged();
+    }
+
+    @Override
+    public ItemStack removeContentItem(int slot, int amount) {
+        if (slot < 0 || slot >= this.contentItems.size() || amount <= 0) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack stack = this.contentItems.get(slot);
+        if (stack.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack removed = stack.split(amount);
+        if (stack.isEmpty()) {
+            this.contentItems.set(slot, ItemStack.EMPTY);
+        }
+        this.setChanged();
+        return removed;
     }
 
     @Override
@@ -275,6 +359,17 @@ public class BlueprintBoxBlockEntity extends ChestBlockEntity implements Worldly
         super.saveAdditional(tag, registries);
         ContainerHelper.saveAllItems(tag, this.items, registries);
         tag.putIntArray(BlueprintBoxData.TAG_LIMITS, this.limits);
+        tag.put(BlueprintBoxData.TAG_TANK, this.getTank().save());
+        ListTag contentList = new ListTag();
+        for (int i = 0; i < this.contentItems.size(); i++) {
+            ItemStack stack = this.contentItems.get(i);
+            if (!stack.isEmpty()) {
+                CompoundTag stackTag = (CompoundTag) stack.save(registries);
+                stackTag.putByte("Slot", (byte) i);
+                contentList.add(stackTag);
+            }
+        }
+        tag.put(BlueprintBoxData.TAG_CONTENT_ITEMS, contentList);
         if (this.blueprint != null && !this.blueprint.isEmpty()) {
             tag.put(BlueprintBoxData.TAG_BLUEPRINT, this.blueprint.save(registries));
         }
@@ -297,6 +392,16 @@ public class BlueprintBoxBlockEntity extends ChestBlockEntity implements Worldly
         this.limits = new int[slots];
         int[] stored = tag.getIntArray(BlueprintBoxData.TAG_LIMITS);
         System.arraycopy(stored, 0, this.limits, 0, Math.min(stored.length, slots));
+        this.tank = FluidTank.load(tag.getCompound(BlueprintBoxData.TAG_TANK), this.getTankCapacity());
+        this.contentItems = NonNullList.withSize(this.getContentCapacity(), ItemStack.EMPTY);
+        ListTag contentList = tag.getList(BlueprintBoxData.TAG_CONTENT_ITEMS, Tag.TAG_COMPOUND);
+        for (int i = 0; i < contentList.size(); i++) {
+            CompoundTag stackTag = contentList.getCompound(i);
+            int contentSlot = stackTag.getByte("Slot") & 255;
+            if (contentSlot < this.contentItems.size()) {
+                this.contentItems.set(contentSlot, ItemStack.parseOptional(registries, stackTag));
+            }
+        }
         if (tag.contains(BlueprintBoxData.TAG_BLUEPRINT, Tag.TAG_COMPOUND)) {
             this.blueprint = BlueprintData.load(tag.getCompound(BlueprintBoxData.TAG_BLUEPRINT), registries);
         } else {

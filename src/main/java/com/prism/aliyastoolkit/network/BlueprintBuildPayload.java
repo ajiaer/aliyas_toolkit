@@ -11,10 +11,12 @@ import com.prism.aliyastoolkit.blueprint.BlueprintBoxData;
 import com.prism.aliyastoolkit.blueprint.BlueprintBoxItem;
 import com.prism.aliyastoolkit.blueprint.BlueprintData;
 import com.prism.aliyastoolkit.blueprint.BlueprintRotation;
+import com.prism.aliyastoolkit.blueprint.FluidTank;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.NonNullList;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -28,6 +30,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -128,8 +131,18 @@ public record BlueprintBuildPayload(BlockPos target, int rotation) implements Cu
                 }
             }
 
-            // 消耗精确材料（方块物品 + 容器内容物）
+            // 消耗精确材料（方块物品 + 储罐流体）；容器内容物不再作为建造材料，也不恢复。
+            List<BlueprintData.FluidRequirement> fluidRequirements = blueprint.fluidRequirements();
+            FluidTank tank = BlueprintBoxData.readTank(held, boxItem.tier().tankCapacity());
+            if (!tank.containsAll(fluidRequirements)) {
+                player.displayClientMessage(
+                        Component.translatable("message.aliyastoolkit.blueprint.not_enough"), true);
+                return;
+            }
             NonNullList<ItemStack> items = BlueprintBoxData.readItems(held, capacity);
+            // 第二栏的容器内容物：允许缺货，有多少回填多少。
+            NonNullList<ItemStack> contentItems = BlueprintBoxData.readContentItems(held,
+                    boxItem.tier().contentSlots(), level.registryAccess());
             for (BlueprintData.Requirement requirement : blueprint.requirements()) {
                 int remaining = requirement.count();
                 for (int i = 0; i < items.size() && remaining > 0; i++) {
@@ -148,6 +161,8 @@ public record BlueprintBuildPayload(BlockPos target, int rotation) implements Cu
                 }
             }
             BlueprintBoxData.writeItems(held, items);
+            tank.consume(fluidRequirements);
+            BlueprintBoxData.writeTank(held, tank);
 
             for (int i = 0; i < blueprint.entries().size(); i++) {
                 BlockState state = BlueprintRotation.rotate(blueprint.entries().get(i).state(), rotation);
@@ -155,6 +170,9 @@ public record BlueprintBuildPayload(BlockPos target, int rotation) implements Cu
             }
             correctShapes(level, destinations);
             restoreBlockEntities(level, blueprint, payload.target(), rotation);
+            restoreContainerContents(level, blueprint, payload.target(), rotation, contentItems);
+            restoreContainerItems(level, blueprint, payload.target(), rotation);
+            BlueprintBoxData.writeContentItems(held, contentItems, level.registryAccess());
 
             level.playSound(null, payload.target(),
                     BlueprintRotation.rotate(blueprint.entries().get(0).state(), rotation)
@@ -167,6 +185,101 @@ public record BlueprintBuildPayload(BlockPos target, int rotation) implements Cu
         });
     }
 
+
+    /**
+     * 回填容器内容物：按蓝图记录的原容器 / 原槽位放回，缺货就少放一些，不影响建造。
+     */
+    private static void restoreContainerContents(ServerLevel level, BlueprintData blueprint, BlockPos target,
+            int rotation, NonNullList<ItemStack> available) {
+        for (BlueprintData.ContainerContent content : blueprint.contents()) {
+            BlockPos destination = blueprint.destination(content.x(), content.y(), content.z(), target, rotation);
+            if (!level.isLoaded(destination)) {
+                continue;
+            }
+            BlockEntity blockEntity = level.getBlockEntity(destination);
+            if (blockEntity == null || content.stack().isEmpty()) {
+                continue;
+            }
+            int taken = takeFromAvailable(available, content.stack(), content.stack().getCount());
+            if (taken <= 0) {
+                continue;
+            }
+            ItemStack toPlace = content.stack().copyWithCount(taken);
+            if (blockEntity instanceof Container container) {
+                int slot = content.slot();
+                if (slot >= 0 && slot < container.getContainerSize()) {
+                    ItemStack existing = container.getItem(slot);
+                    if (existing.isEmpty()) {
+                        container.setItem(slot, toPlace);
+                    } else if (ItemStack.isSameItemSameComponents(existing, toPlace)) {
+                        ItemStack merged = existing.copy();
+                        merged.grow(taken);
+                        container.setItem(slot, merged);
+                    }
+                }
+            } else if (blockEntity.getType() == BlockEntityType.CAMPFIRE) {
+                CompoundTag stackTag = (CompoundTag) toPlace.save(level.registryAccess());
+                stackTag.putByte("Slot", (byte) content.slot());
+                ListTag items = new ListTag();
+                items.add(stackTag);
+                CompoundTag itemTag = new CompoundTag();
+                itemTag.put("Items", items);
+                blockEntity.loadWithComponents(itemTag, level.registryAccess());
+            } else if (blockEntity.getType() == BlockEntityType.LECTERN) {
+                CompoundTag itemTag = new CompoundTag();
+                itemTag.put("Book", toPlace.save(level.registryAccess()));
+                blockEntity.loadWithComponents(itemTag, level.registryAccess());
+            }
+            blockEntity.setChanged();
+            level.sendBlockUpdated(destination, blockEntity.getBlockState(), blockEntity.getBlockState(),
+                    Block.UPDATE_ALL);
+        }
+    }
+
+    /** 从第二栏里取走指定数量的物品，返回实际取到的数量。 */
+    private static int takeFromAvailable(NonNullList<ItemStack> available, ItemStack wanted, int max) {
+        int taken = 0;
+        for (int i = 0; i < available.size() && taken < max; i++) {
+            ItemStack stack = available.get(i);
+            if (stack.isEmpty() || !BlueprintBoxData.matches(wanted, stack)) {
+                continue;
+            }
+            int take = Math.min(max - taken, stack.getCount());
+            stack.shrink(take);
+            taken += take;
+        }
+        return taken;
+    }
+
+    /**
+     * 整体记录的容器（潜影盒等）：内容由容器物品本身携带，
+     * 这里把记录时那个容器物品的容器组件应用到放好的方块实体上。
+     */
+    private static void restoreContainerItems(ServerLevel level, BlueprintData blueprint, BlockPos target,
+            int rotation) {
+        for (BlueprintData.ContainerItem item : blueprint.containerItems()) {
+            BlockPos destination = blueprint.destination(item.x(), item.y(), item.z(), target, rotation);
+            if (!level.isLoaded(destination)) {
+                continue;
+            }
+            BlockEntity blockEntity = level.getBlockEntity(destination);
+            if (!(blockEntity instanceof Container container)) {
+                continue;
+            }
+            ItemContainerContents contents = item.stack().get(DataComponents.CONTAINER);
+            if (contents == null) {
+                continue;
+            }
+            NonNullList<ItemStack> stacks = NonNullList.withSize(container.getContainerSize(), ItemStack.EMPTY);
+            contents.copyInto(stacks);
+            for (int slot = 0; slot < stacks.size(); slot++) {
+                container.setItem(slot, stacks.get(slot));
+            }
+            blockEntity.setChanged();
+            level.sendBlockUpdated(destination, blockEntity.getBlockState(), blockEntity.getBlockState(),
+                    Block.UPDATE_ALL);
+        }
+    }
 
     /**
      * 放完所有方块后重新计算连接形状（楼梯内外角、栅栏/墙/玻璃板连接、箱子合并、铁轨等）。
@@ -216,37 +329,11 @@ public record BlueprintBuildPayload(BlockPos target, int rotation) implements Cu
             tag.putInt("y", destination.getY());
             tag.putInt("z", destination.getZ());
             blockEntity.loadWithComponents(tag, level.registryAccess());
-
+            // 容器先清空：普通容器的内容物由 restoreContainerContents 回填，
+            // 潜影盒这类容器由 restoreContainerItems 按记录时的容器物品回填。
             if (blockEntity instanceof Container container) {
-                // NBT 中可能带有旧的物品数据；先清空，再按记录放回原槽位，避免重复。
                 for (int slot = 0; slot < container.getContainerSize(); slot++) {
                     container.setItem(slot, ItemStack.EMPTY);
-                }
-                for (BlueprintData.ContainerContent content : blueprint.contentsAt(entry.x(), entry.y(), entry.z())) {
-                    int slot = content.slot();
-                    if (slot >= 0 && slot < container.getContainerSize()) {
-                        container.setItem(slot, content.stack().copy());
-                    }
-                }
-            } else if (blockEntity.getType() == BlockEntityType.CAMPFIRE) {
-                CompoundTag itemTag = new CompoundTag();
-                ListTag items = new ListTag();
-                for (BlueprintData.ContainerContent content : blueprint.contentsAt(entry.x(), entry.y(), entry.z())) {
-                    CompoundTag stackTag = (CompoundTag) content.stack().save(level.registryAccess());
-                    stackTag.putByte("Slot", (byte) content.slot());
-                    items.add(stackTag);
-                }
-                itemTag.put("Items", items);
-                blockEntity.loadWithComponents(itemTag, level.registryAccess());
-            } else if (blockEntity.getType() == BlockEntityType.LECTERN) {
-                for (BlueprintData.ContainerContent content : blueprint.contentsAt(entry.x(), entry.y(), entry.z())) {
-                    if (content.slot() == 0) {
-                        CompoundTag itemTag = new CompoundTag();
-                        itemTag.put("Book", content.stack().save(level.registryAccess()));
-                        itemTag.putInt("Page", tag.getInt("Page"));
-                        blockEntity.loadWithComponents(itemTag, level.registryAccess());
-                        break;
-                    }
                 }
             }
             blockEntity.setChanged();
