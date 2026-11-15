@@ -34,6 +34,8 @@ public class BlueprintBoxMenu extends AbstractContainerMenu {
     private final int visibleRows;
     private final int visibleSlots;
     private int scrollRow;
+    /** 0 = 蓝图箱材料，1 = 蓝图内容器里的物品。 */
+    private int viewMode;
 
     public BlueprintBoxMenu(int containerId, Inventory playerInventory, BlueprintBoxBlockEntity box) {
         this(containerId, playerInventory, box, BlueprintBoxReference.block(box.getBlockPos()));
@@ -133,8 +135,35 @@ public class BlueprintBoxMenu extends AbstractContainerMenu {
         return this.scrollRow;
     }
 
+    public int getViewMode() {
+        return this.viewMode;
+    }
+
+    /** 0 = 蓝图箱材料，1 = 蓝图内容器里的物品；切换后所有可见格子读写另一份数据。 */
+    public void setViewMode(int mode) {
+        this.viewMode = mode == 1 ? 1 : 0;
+        for (int i = 0; i < this.visibleSlots; i++) {
+            if (this.slots.get(i) instanceof BlueprintSlot slot) {
+                slot.setContentsView(this.viewMode == 1);
+            }
+        }
+        // 两栏的总行数不同，切换后按新的一栏重新限制滚动位置并重新映射槽位。
+        this.applyScroll(Mth.clamp(this.scrollRow, 0, this.getMaxScroll()));
+    }
+
     public int getMaxScroll() {
-        return Math.max(0, this.totalRows - this.visibleRows);
+        int rows = this.viewMode == 1 ? this.getContentRows() : this.totalRows;
+        return Math.max(0, rows - this.visibleRows);
+    }
+
+    /** 第二栏（容器内容物）有多少行：按它自己的容量算，最多 {@link #VISIBLE_ROWS} 行。 */
+    public int getContentRows() {
+        return Math.min(VISIBLE_ROWS, (this.box.getContentCapacity() + 8) / 9);
+    }
+
+    /** 当前这一栏实际显示的行数：第一栏按箱子容量，第二栏按内容容量。 */
+    public int getVisibleRowsForView() {
+        return this.viewMode == 1 ? this.getContentRows() : this.visibleRows;
     }
 
     /** 滚动到指定行；更新每个可见槽位对应的容器索引。 */
@@ -143,10 +172,14 @@ public class BlueprintBoxMenu extends AbstractContainerMenu {
         if (clamped == this.scrollRow) {
             return;
         }
-        this.scrollRow = clamped;
+        this.applyScroll(clamped);
+    }
+
+    private void applyScroll(int row) {
+        this.scrollRow = row;
         for (int i = 0; i < this.visibleSlots; i++) {
             if (this.slots.get(i) instanceof BlueprintSlot slot) {
-                slot.setContainerSlot((clamped + slot.getRow()) * 9 + slot.getColumn());
+                slot.setContainerSlot((row + slot.getRow()) * 9 + slot.getColumn());
             }
         }
     }

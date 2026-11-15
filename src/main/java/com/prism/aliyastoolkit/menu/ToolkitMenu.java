@@ -27,10 +27,10 @@ public class ToolkitMenu extends AbstractContainerMenu {
     public static final int WHITELIST_SIZE = 9;
     public static final int WHITELIST_COLUMNS = 3;
     /** 白名单格子左上角坐标（相对 GUI），位于右侧内容区中间。 */
-    public static final int WHITELIST_X = 143;
+    public static final int WHITELIST_X = 139;
     public static final int WHITELIST_Y = 62;
     /** 玩家背包格子左上角坐标（相对 GUI）：放在右侧内容区，和左侧按钮栏完全分开。 */
-    public static final int INVENTORY_X = 89;
+    public static final int INVENTORY_X = 85;
     public static final int INVENTORY_Y = 162;
     public static final int HOTBAR_Y = 220;
 

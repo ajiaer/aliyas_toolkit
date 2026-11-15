@@ -10,6 +10,8 @@ import com.prism.aliyastoolkit.ChainMining;
 import com.prism.aliyastoolkit.CopyPaste;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.NonNullList;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -19,6 +21,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -67,7 +70,7 @@ public final class BlueprintCapture {
     }
 
     public static Result capture(Level level, BlockPos min, List<BlockPos> offsets, @Nullable Player player) {
-        return capture(level, min, offsets, player, false);
+        return capture(level, min, offsets, player, false, true);
     }
 
     /**
@@ -75,12 +78,22 @@ public final class BlueprintCapture {
      */
     public static Result capture(Level level, BlockPos min, List<BlockPos> offsets, @Nullable Player player,
             boolean collectFluids) {
+        return capture(level, min, offsets, player, collectFluids, true);
+    }
+
+    /**
+     * @param collectFluids 是否把可用桶接取的流体源头也记录进蓝图
+     * @param recordContents 是否记录容器内的物品（关闭后容器建成时是空的，潜影盒也只是空盒子）
+     */
+    public static Result capture(Level level, BlockPos min, List<BlockPos> offsets, @Nullable Player player,
+            boolean collectFluids, boolean recordContents) {
         if (offsets.isEmpty() || offsets.size() > CopyPaste.MAX_VOLUME) {
             return new Result(null, "message.aliyastoolkit.copy_paste_no_blocks");
         }
         List<BlueprintData.Entry> entries = new ArrayList<>();
         List<BlueprintData.BlockEntityEntry> blockEntities = new ArrayList<>();
         List<BlueprintData.ContainerContent> contents = new ArrayList<>();
+        List<BlueprintData.ContainerItem> containerItems = new ArrayList<>();
         int maxX = 0;
         int maxY = 0;
         int maxZ = 0;
@@ -127,47 +140,66 @@ public final class BlueprintCapture {
             tag.remove("LootTable");
             tag.remove("LootTableSeed");
             if (blockEntity instanceof Container container) {
-                // 容器物品单独记录为材料成本；NBT 里不需要重复保存
+                // 容器内容物不写进方块实体数据：普通容器记到第二栏，潜影盒这类容器由物品本身携带。
                 tag.remove("Items");
-                tag.remove("RecordItem");
-                tag.remove("Book");
-                for (int slot = 0; slot < container.getContainerSize(); slot++) {
-                    ItemStack stack = container.getItem(slot);
-                    if (!stack.isEmpty()) {
-                        if (stack.getItem() instanceof BlueprintBoxItem) {
-                            skippedBlueprintBoxes++;
-                            continue;
+                if (!recordContents) {
+                    // 关闭“记录容器内物品”：容器建成时是空的，潜影盒也只是空盒子。
+                    tag.remove("RecordItem");
+                    tag.remove("Book");
+                } else if (BlueprintData.keepsItemsInside(state)) {
+                    // 潜影盒这类容器：蓝图只记录“装着物品的潜影盒”这个物品，
+                    // 里面有什么由潜影盒自己的容器组件记录（和把潜影盒放进箱子再记录到第二栏一致）。
+                    ItemStack filled = filledContainerItem(state, container);
+                    if (!filled.isEmpty()) {
+                        containerItems.add(new BlueprintData.ContainerItem(offset.getX(), offset.getY(),
+                                offset.getZ(), filled));
+                    }
+                } else {
+                    // 容器物品单独记录为材料成本
+                    tag.remove("RecordItem");
+                    tag.remove("Book");
+                    for (int slot = 0; slot < container.getContainerSize(); slot++) {
+                        ItemStack stack = container.getItem(slot);
+                        if (!stack.isEmpty()) {
+                            if (stack.getItem() instanceof BlueprintBoxItem) {
+                                skippedBlueprintBoxes++;
+                                continue;
+                            }
+                            contents.add(new BlueprintData.ContainerContent(offset.getX(), offset.getY(), offset.getZ(),
+                                    slot, stack.copy()));
                         }
-                        contents.add(new BlueprintData.ContainerContent(offset.getX(), offset.getY(), offset.getZ(),
-                                slot, stack.copy()));
                     }
                 }
             } else if (blockEntity.getType() == BlockEntityType.CAMPFIRE) {
                 // 营火不是 Container，但物品在 Items 列表里
-                ListTag items = tag.getList("Items", Tag.TAG_COMPOUND);
-                for (int i = 0; i < items.size(); i++) {
-                    CompoundTag itemTag = items.getCompound(i);
-                    ItemStack stack = ItemStack.parseOptional(level.registryAccess(), itemTag);
-                    if (!stack.isEmpty()) {
-                        if (stack.getItem() instanceof BlueprintBoxItem) {
-                            skippedBlueprintBoxes++;
-                            continue;
+                if (recordContents) {
+                    ListTag items = tag.getList("Items", Tag.TAG_COMPOUND);
+                    for (int i = 0; i < items.size(); i++) {
+                        CompoundTag itemTag = items.getCompound(i);
+                        ItemStack stack = ItemStack.parseOptional(level.registryAccess(), itemTag);
+                        if (!stack.isEmpty()) {
+                            if (stack.getItem() instanceof BlueprintBoxItem) {
+                                skippedBlueprintBoxes++;
+                                continue;
+                            }
+                            int slot = itemTag.getByte("Slot") & 255;
+                            contents.add(new BlueprintData.ContainerContent(offset.getX(), offset.getY(), offset.getZ(),
+                                    slot, stack.copy()));
                         }
-                        int slot = itemTag.getByte("Slot") & 255;
-                        contents.add(new BlueprintData.ContainerContent(offset.getX(), offset.getY(), offset.getZ(),
-                                slot, stack.copy()));
                     }
                 }
                 tag.remove("Items");
             } else if (blockEntity.getType() == BlockEntityType.LECTERN) {
                 // 讲台的书在 Book 字段里
-                ItemStack book = ItemStack.parseOptional(level.registryAccess(), tag.getCompound("Book"));
-                if (!book.isEmpty()) {
-                    if (book.getItem() instanceof BlueprintBoxItem) {
-                        skippedBlueprintBoxes++;
-                    } else {
-                        contents.add(new BlueprintData.ContainerContent(offset.getX(), offset.getY(), offset.getZ(), 0,
-                                book.copy()));
+                if (recordContents) {
+                    ItemStack book = ItemStack.parseOptional(level.registryAccess(), tag.getCompound("Book"));
+                    if (!book.isEmpty()) {
+                        if (book.getItem() instanceof BlueprintBoxItem) {
+                            skippedBlueprintBoxes++;
+                        } else {
+                            contents.add(new BlueprintData.ContainerContent(offset.getX(), offset.getY(), offset.getZ(), 0,
+                                    book.copy()));
+                        }
                     }
                 }
                 tag.remove("Book");
@@ -187,8 +219,31 @@ public final class BlueprintCapture {
         if (entries.isEmpty()) {
             return new Result(null, "message.aliyastoolkit.copy_paste_no_blocks", skippedBlueprintBoxes);
         }
-        return new Result(new BlueprintData(maxX + 1, maxY + 1, maxZ + 1, entries, blockEntities, contents), null,
-                skippedBlueprintBoxes);
+        return new Result(new BlueprintData(maxX + 1, maxY + 1, maxZ + 1, entries, blockEntities, contents,
+                containerItems), null, skippedBlueprintBoxes);
+    }
+
+    /** 生成带内容的容器物品（例如装着物品的潜影盒），用作建造材料。 */
+    private static ItemStack filledContainerItem(BlockState state, Container container) {
+        Item item = state.getBlock().asItem();
+        if (item == Items.AIR) {
+            return ItemStack.EMPTY;
+        }
+        NonNullList<ItemStack> items = NonNullList.withSize(container.getContainerSize(), ItemStack.EMPTY);
+        boolean any = false;
+        for (int slot = 0; slot < container.getContainerSize(); slot++) {
+            ItemStack stack = container.getItem(slot);
+            if (!stack.isEmpty()) {
+                items.set(slot, stack.copy());
+                any = true;
+            }
+        }
+        if (!any) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack filled = new ItemStack(item);
+        filled.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(items));
+        return filled;
     }
 
     private static boolean isBucketableFluidSource(BlockState state) {

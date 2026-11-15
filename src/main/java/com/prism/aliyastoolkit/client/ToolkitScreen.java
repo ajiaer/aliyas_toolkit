@@ -1,7 +1,9 @@
 package com.prism.aliyastoolkit.client;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
 
 import com.prism.aliyastoolkit.AliyasToolkitClient;
@@ -21,6 +23,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
@@ -29,7 +32,10 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import org.lwjgl.glfw.GLFW;
@@ -47,8 +53,8 @@ import org.lwjgl.glfw.GLFW;
  * <ul>
  * <li>物品切换：功能说明文字 + “交换行”（与快捷栏交换的背包行，1-3）</li>
  * <li>自动补充：补充物品是否需要完全一致 + 3x3 物品白名单（白名单和玩家背包使用原版槽位样式）</li>
- * <li>连锁破坏：连锁数量（左键 +1、右键 -1），以及只对石头/泥土这类大量方块生效的
- * 预设（预设名称 + 横截面 + 层数 + 锁定方向）</li>
+ * <li>连锁破坏：连锁数量（左键 +1、右键 -1）、“黑名单”开关（下半部分在“预设”和“黑名单物品栏”之间切换），
+ * 以及只对黑名单里的方块生效的预设（预设名称 + 横截面 + 层数 + 锁定方向）</li>
  * <li>快速建造：预设名称 + 操作 / 维度 / 形状 / 填充</li>
  * <li>蓝图建造：功能说明 + 选区 / 剪切或复制记录 / 虚影预览 / 旋转 / 固定 / 建造的操作提示</li>
  * </ul>
@@ -74,17 +80,17 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     /** 左侧功能按钮栏。 */
     private static final int TAB_X = 8;
     private static final int TAB_TOP = 26;
-    private static final int TAB_WIDTH = 68;
+    private static final int TAB_WIDTH = 60;
     private static final int TAB_HEIGHT = 18;
     private static final int TAB_GAP = 4;
     /** 左侧按钮栏与右侧内容区之间的分隔线。 */
-    private static final int DIVIDER_X = 80;
+    private static final int DIVIDER_X = 72;
     /** 分隔线底部留的空白，避免直接顶到面板边框。 */
     private static final int DIVIDER_BOTTOM_GAP = 8;
 
     /** 右侧设置区。 */
-    private static final int SETTINGS_X = 88;
-    private static final int SETTINGS_RIGHT = 252;
+    private static final int SETTINGS_X = 78;
+    private static final int SETTINGS_RIGHT = 254;
     private static final int SETTINGS_WIDTH = SETTINGS_RIGHT - SETTINGS_X;
     /** 右侧内容区的水平中心（白名单、提示文字居中用）。 */
     private static final int SETTINGS_CENTER_X = (SETTINGS_X + SETTINGS_RIGHT) / 2;
@@ -101,22 +107,45 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
 
     /** 连锁破坏页：各行的纵坐标。 */
     private static final int CHAIN_LIMIT_Y = 30;
-    private static final int CHAIN_MASSIVE_LABEL_Y = 58;
-    private static final int CHAIN_PRESET_Y = 72;
+    /** “黑名单”开关按钮：连锁数量下面一行。 */
+    private static final int CHAIN_BLACKLIST_BUTTON_Y = 48;
+    private static final int CHAIN_PRESET_Y = 66;
     /** 预设名称（可以直接编辑的文字框，不写标题）。 */
-    private static final int CHAIN_PRESET_NAME_Y = 88;
+    private static final int CHAIN_PRESET_NAME_Y = 82;
     /** 大量方块：上 / 左·层数·右 / 下，十字排列。 */
-    private static final int CHAIN_SHAPE_Y = 110;
+    private static final int CHAIN_SHAPE_Y = 100;
     private static final int CHAIN_SHAPE_ROW_HEIGHT = 20;
     private static final int CHAIN_SHAPE_BUTTON_WIDTH = 38;
     /** 十字排列的三列（相对 GUI 的 x，整体在内容区居中）。 */
-    private static final int CHAIN_SHAPE_LEFT_X = 107;
-    private static final int CHAIN_SHAPE_CENTER_X = 151;
-    private static final int CHAIN_SHAPE_RIGHT_X = 195;
+    private static final int CHAIN_SHAPE_LEFT_X = 103;
+    private static final int CHAIN_SHAPE_CENTER_X = 147;
+    private static final int CHAIN_SHAPE_RIGHT_X = 191;
     /** 锁定方向、允许其它方块各占一整行。 */
-    private static final int CHAIN_LOCK_Y = 170;
-    private static final int CHAIN_ALLOW_OTHER_Y = 190;
-    private static final int CHAIN_HINT_Y = 210;
+    private static final int CHAIN_LOCK_Y = 162;
+    private static final int CHAIN_ALLOW_OTHER_Y = 180;
+    private static final int CHAIN_HINT_Y = 196;
+
+    /** 连锁破坏黑名单页：物品栏（可见 5 行，总共 16 行）、下方按钮和提示。 */
+    private static final int BLACKLIST_GRID_Y = 66;
+    private static final int BLACKLIST_COLUMNS = 9;
+    private static final int BLACKLIST_VISIBLE_ROWS = 5;
+    private static final int BLACKLIST_ROWS = 16;
+    private static final int BLACKLIST_BUTTON_Y = 162;
+    private static final int BLACKLIST_BUTTON_WIDTH = 86;
+    private static final int BLACKLIST_HINT_Y = 182;
+    /** 滚动条：和蓝图箱界面一样使用创造模式物品栏的滚动条精灵。 */
+    private static final int BLACKLIST_SCROLL_TRACK_X = 241;
+    private static final int BLACKLIST_SCROLL_TRACK_WIDTH = 14;
+    private static final int BLACKLIST_SCROLL_X = 242;
+    private static final int BLACKLIST_SCROLL_WIDTH = 12;
+    private static final int BLACKLIST_SCROLL_HEIGHT = 15;
+    private static final ResourceLocation CREATIVE_SCROLLER =
+            ResourceLocation.withDefaultNamespace("container/creative_inventory/scroller");
+    /** 选中格子的底色（适中的红色）。 */
+    private static final int BLACKLIST_SELECTED_COLOR = 0xFFB24A4A;
+    /** 原版容器槽位底色 / 滚动条滑槽的深色内边框。 */
+    private static final int SLOT_FILL = 0xFF8B8B8B;
+    private static final int SCROLL_TRACK_DARK = 0xFF373737;
 
     /** 快速建造页：各行的纵坐标。 */
     private static final int BUILD_PRESET_Y = 32;
@@ -128,10 +157,11 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private static final int BUILD_FILL_Y = 128;
     private static final int BUILD_HINT_Y = 152;
 
-    /** 蓝图建造页：说明文字、自动收集流体开关和操作提示的纵坐标。 */
+    /** 蓝图建造页：说明文字、自动收集流体开关、记录容器内物品开关和操作提示的纵坐标。 */
     private static final int COPY_PASTE_DESC_Y = 34;
     private static final int COPY_PASTE_FLUID_Y = 60;
-    private static final int COPY_PASTE_HINT_Y = 82;
+    private static final int COPY_PASTE_CONTENTS_Y = 78;
+    private static final int COPY_PASTE_HINT_Y = 94;
 
     /** 当前界面里的设置（和客户端缓存保持同步）。 */
     private ToolkitSettings settings = ToolkitSettingsCache.get();
@@ -178,6 +208,19 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private Button buildShapeButton;
     private Button buildFillButton;
     private Button collectFluidsButton;
+    private Button recordContentsButton;
+    /** 连锁破坏页的“黑名单”开关（按下 = 显示黑名单物品栏）。 */
+    private ToggleButton chainBlacklistButton;
+    private Button blacklistDeleteButton;
+    private Button blacklistAddButton;
+
+    /** 黑名单物品栏是否显示（与“黑名单”按钮的按下状态一致）。 */
+    private boolean blacklistView;
+    /** 黑名单物品栏当前滚动到第几行（0 ~ 11）。 */
+    private int blacklistScroll;
+    /** 黑名单物品栏里选中的条目（索引对应 {@link ToolkitSettings#chainBlacklist()}）。 */
+    private final Set<Integer> blacklistSelection = new LinkedHashSet<>();
+    private boolean draggingBlacklistScroll;
 
     public ToolkitScreen(ToolkitMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
@@ -201,6 +244,18 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
 
         int x = this.leftPos;
         int y = this.topPos;
+
+        // 从“添加方块”模式回来时，直接显示连锁破坏页的黑名单
+        boolean reopenBlacklist = ChainBlacklistPicker.consumeReopenBlacklistView();
+        ChainBlacklistPicker.cancel();
+        if (reopenBlacklist) {
+            this.activeFeature = Feature.CHAIN_MINING;
+            this.blacklistView = true;
+            // 滚到刚加进去的那一格（列表最后一个）
+            int size = this.settings.chainBlacklist().size();
+            int row = Math.max(0, (size - 1) / BLACKLIST_COLUMNS);
+            this.blacklistScroll = Mth.clamp(row - (BLACKLIST_VISIBLE_ROWS - 1), 0, this.blacklistMaxScroll());
+        }
 
         // 右上角关闭按钮
         this.addRenderableWidget(Button.builder(Component.literal("X"), button -> this.onClose())
@@ -245,6 +300,31 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.chain_limit.tooltip")),
                 () -> this.changeChainLimit(1), () -> this.changeChainLimit(-1)), this.chainMiningWidgets);
 
+        // 连锁破坏：黑名单开关（按下后下半部分换成黑名单物品栏）
+        this.chainBlacklistButton = this.addToGroup(new ToggleButton(
+                x + SETTINGS_X, y + CHAIN_BLACKLIST_BUTTON_Y, SETTINGS_WIDTH, 14,
+                Component.translatable("gui.aliyastoolkit.settings.chain_blacklist"),
+                button -> this.toggleBlacklistView(),
+                Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.chain_blacklist.tooltip"))),
+                this.chainMiningWidgets);
+
+        // 连锁破坏黑名单：删除选中的方块 / 添加（暂时关闭界面去点方块）
+        this.blacklistDeleteButton = this.addToGroup(Button
+                .builder(Component.translatable("gui.aliyastoolkit.settings.chain_blacklist.delete"),
+                        button -> this.deleteSelectedBlacklist())
+                .bounds(x + SETTINGS_X, y + BLACKLIST_BUTTON_Y, BLACKLIST_BUTTON_WIDTH, 14)
+                .tooltip(Tooltip.create(
+                        Component.translatable("gui.aliyastoolkit.settings.chain_blacklist.delete.tooltip")))
+                .build(), this.chainMiningWidgets);
+        this.blacklistAddButton = this.addToGroup(Button
+                .builder(Component.translatable("gui.aliyastoolkit.settings.chain_blacklist.add"),
+                        button -> this.startBlacklistAdd())
+                .bounds(x + SETTINGS_X + BLACKLIST_BUTTON_WIDTH + 4, y + BLACKLIST_BUTTON_Y,
+                        BLACKLIST_BUTTON_WIDTH, 14)
+                .tooltip(Tooltip.create(
+                        Component.translatable("gui.aliyastoolkit.settings.chain_blacklist.add.tooltip")))
+                .build(), this.chainMiningWidgets);
+
         // 大量方块：预设选择 / 新建 / 删除
         this.presetPrevButton = this.addToGroup(Button
                 .builder(Component.literal("<"), button -> this.selectRelativePreset(-1))
@@ -253,23 +333,23 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 .build(), this.chainMiningWidgets);
         this.presetNameButton = this.addToGroup(Button
                 .builder(Component.empty(), button -> this.selectRelativePreset(1))
-                .bounds(x + 104, y + CHAIN_PRESET_Y, 68, 14)
+                .bounds(x + 94, y + CHAIN_PRESET_Y, 84, 14)
                 .build(), this.chainMiningWidgets);
         this.presetNextButton = this.addToGroup(Button
                 .builder(Component.literal(">"), button -> this.selectRelativePreset(1))
-                .bounds(x + 174, y + CHAIN_PRESET_Y, 14, 14)
+                .bounds(x + 180, y + CHAIN_PRESET_Y, 14, 14)
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.preset.next")))
                 .build(), this.chainMiningWidgets);
         this.presetAddButton = this.addToGroup(Button
                 .builder(Component.translatable("gui.aliyastoolkit.settings.preset.add"),
                         button -> this.applySettings(this.settings.withAddedPreset()))
-                .bounds(x + 190, y + CHAIN_PRESET_Y, 28, 14)
+                .bounds(x + 196, y + CHAIN_PRESET_Y, 28, 14)
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.preset.add.tooltip")))
                 .build(), this.chainMiningWidgets);
         this.presetDeleteButton = this.addToGroup(Button
                 .builder(Component.translatable("gui.aliyastoolkit.settings.preset.delete"),
                         button -> this.applySettings(this.settings.withRemovedPreset()))
-                .bounds(x + 220, y + CHAIN_PRESET_Y, 28, 14)
+                .bounds(x + 226, y + CHAIN_PRESET_Y, 28, 14)
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.preset.delete.tooltip")))
                 .build(), this.chainMiningWidgets);
 
@@ -327,23 +407,23 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 .build(), this.quickBuildWidgets);
         this.buildPresetNameButton = this.addToGroup(Button
                 .builder(Component.empty(), button -> this.selectRelativeBuildPreset(1))
-                .bounds(x + 104, y + BUILD_PRESET_Y, 68, 14)
+                .bounds(x + 94, y + BUILD_PRESET_Y, 84, 14)
                 .build(), this.quickBuildWidgets);
         this.buildPresetNextButton = this.addToGroup(Button
                 .builder(Component.literal(">"), button -> this.selectRelativeBuildPreset(1))
-                .bounds(x + 174, y + BUILD_PRESET_Y, 14, 14)
+                .bounds(x + 180, y + BUILD_PRESET_Y, 14, 14)
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.preset.next")))
                 .build(), this.quickBuildWidgets);
         this.buildPresetAddButton = this.addToGroup(Button
                 .builder(Component.translatable("gui.aliyastoolkit.settings.preset.add"),
                         button -> this.applySettings(this.settings.withAddedBuildPreset()))
-                .bounds(x + 190, y + BUILD_PRESET_Y, 28, 14)
+                .bounds(x + 196, y + BUILD_PRESET_Y, 28, 14)
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.preset.add.tooltip")))
                 .build(), this.quickBuildWidgets);
         this.buildPresetDeleteButton = this.addToGroup(Button
                 .builder(Component.translatable("gui.aliyastoolkit.settings.preset.delete"),
                         button -> this.applySettings(this.settings.withRemovedBuildPreset()))
-                .bounds(x + 220, y + BUILD_PRESET_Y, 28, 14)
+                .bounds(x + 226, y + BUILD_PRESET_Y, 28, 14)
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.preset.delete.tooltip")))
                 .build(), this.quickBuildWidgets);
 
@@ -385,6 +465,14 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.collect_fluids.tooltip")))
                 .build(), this.copyPasteWidgets);
 
+        // 蓝图建造：记录容器内物品（默认开）
+        this.recordContentsButton = this.addToGroup(Button
+                .builder(Component.empty(), button -> this.applySettings(
+                        this.settings.withRecordContainerContents(!this.settings.recordContainerContents())))
+                .bounds(x + SETTINGS_X, y + COPY_PASTE_CONTENTS_Y, SETTINGS_WIDTH, 14)
+                .tooltip(Tooltip.create(Component.translatable("gui.aliyastoolkit.settings.record_contents.tooltip")))
+                .build(), this.copyPasteWidgets);
+
         this.updateButtonLabels();
         this.updateFeatureVisibility();
     }
@@ -424,6 +512,173 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         this.menu.setWhitelistVisible(autoRefill);
         this.menu.setInventoryVisible(autoRefill);
         this.updateHotbarSwapVisibility();
+        this.updateChainWidgetVisibility();
+    }
+
+    /**
+     * 连锁破坏页：“黑名单”按下时，下半部分换成黑名单物品栏（预设相关的控件整组隐藏）。
+     */
+    private void updateChainWidgetVisibility() {
+        boolean chainPage = this.activeFeature == Feature.CHAIN_MINING;
+        boolean preset = chainPage && !this.blacklistView;
+        boolean list = chainPage && this.blacklistView;
+
+        this.chainLimitButton.visible = chainPage;
+        this.chainBlacklistButton.visible = chainPage;
+        this.blacklistDeleteButton.visible = list;
+        this.blacklistAddButton.visible = list;
+
+        this.presetPrevButton.visible = preset;
+        this.presetNameButton.visible = preset;
+        this.presetNextButton.visible = preset;
+        this.presetAddButton.visible = preset;
+        this.presetDeleteButton.visible = preset;
+        this.presetNameField.visible = preset;
+        this.shapeUpButton.visible = preset;
+        this.shapeDownButton.visible = preset;
+        this.shapeLeftButton.visible = preset;
+        this.shapeRightButton.visible = preset;
+        this.lengthButton.visible = preset;
+        this.lockDirectionButton.visible = preset;
+        this.allowOtherBlocksButton.visible = preset;
+    }
+
+    /** “黑名单”按钮：切换“预设区”和“黑名单物品栏”。 */
+    private void toggleBlacklistView() {
+        this.blacklistView = !this.blacklistView;
+        this.blacklistSelection.clear();
+        this.blacklistScroll = Mth.clamp(this.blacklistScroll, 0, this.blacklistMaxScroll());
+        this.updateChainWidgetVisibility();
+        this.updateBlacklistButtons();
+    }
+
+    /** 删除 / 添加按钮的可用状态和“黑名单”按钮的按下状态。 */
+    private void updateBlacklistButtons() {
+        this.chainBlacklistButton.setSelected(this.blacklistView);
+        this.blacklistDeleteButton.active = !this.blacklistSelection.isEmpty();
+        this.blacklistAddButton.active =
+                this.settings.chainBlacklist().size() < ToolkitSettings.MAX_CHAIN_BLACKLIST;
+    }
+
+    /** 黑名单物品栏固定按 16 行计算，右侧始终有滚动条。 */
+    private int blacklistMaxScroll() {
+        return BLACKLIST_ROWS - BLACKLIST_VISIBLE_ROWS;
+    }
+
+    /** 鼠标位置对应的黑名单索引；不在格子上时返回 -1。 */
+    private int blacklistIndexAt(double mouseX, double mouseY) {
+        double relativeX = mouseX - this.leftPos - SETTINGS_X;
+        double relativeY = mouseY - this.topPos - BLACKLIST_GRID_Y;
+        if (relativeX < 0.0D || relativeY < 0.0D) {
+            return -1;
+        }
+        int column = (int) (relativeX / 18.0D);
+        int row = (int) (relativeY / 18.0D);
+        if (column >= BLACKLIST_COLUMNS || row >= BLACKLIST_VISIBLE_ROWS) {
+            return -1;
+        }
+        return (this.blacklistScroll + row) * BLACKLIST_COLUMNS + column;
+    }
+
+    /** 黑名单条目对应的物品（方块 ID → 方块物品），无效 ID 返回空。 */
+    private ItemStack blacklistStack(int index) {
+        List<ResourceLocation> ids = this.settings.chainBlacklist();
+        if (index < 0 || index >= ids.size()) {
+            return ItemStack.EMPTY;
+        }
+        Block block = BuiltInRegistries.BLOCK.get(ids.get(index));
+        if (block == null) {
+            return ItemStack.EMPTY;
+        }
+        Item item = block.asItem();
+        return item == Items.AIR ? ItemStack.EMPTY : new ItemStack(item);
+    }
+
+    /** 删除按钮：把选中的方块移出黑名单。 */
+    private void deleteSelectedBlacklist() {
+        List<ResourceLocation> ids = this.settings.chainBlacklist();
+        List<ResourceLocation> removed = new ArrayList<>();
+        for (int index : this.blacklistSelection) {
+            if (index >= 0 && index < ids.size()) {
+                removed.add(ids.get(index));
+            }
+        }
+        this.blacklistSelection.clear();
+        if (removed.isEmpty()) {
+            this.updateBlacklistButtons();
+            return;
+        }
+        this.applySettings(this.settings.withRemovedChainBlacklist(removed));
+        this.blacklistScroll = Mth.clamp(this.blacklistScroll, 0, this.blacklistMaxScroll());
+    }
+
+    /** 添加按钮：暂时关闭界面，到世界里左键点方块加入黑名单。 */
+    private void startBlacklistAdd() {
+        if (this.settings.chainBlacklist().size() >= ToolkitSettings.MAX_CHAIN_BLACKLIST) {
+            return;
+        }
+        ChainBlacklistPicker.start();
+        this.onClose();
+    }
+
+    /** 黑名单物品栏：5 行可见的格子（选中底色变红）+ 右侧滚动条。 */
+    private void renderBlacklistGrid(GuiGraphics guiGraphics, int left, int top) {
+        for (int row = 0; row < BLACKLIST_VISIBLE_ROWS; row++) {
+            for (int column = 0; column < BLACKLIST_COLUMNS; column++) {
+                int index = (this.blacklistScroll + row) * BLACKLIST_COLUMNS + column;
+                int slotX = left + SETTINGS_X + column * 18;
+                int slotY = top + BLACKLIST_GRID_Y + row * 18;
+                guiGraphics.blit(GENERIC_54, slotX - 1, slotY - 1,
+                        VANILLA_SLOT_SOURCE_X, VANILLA_SLOT_SOURCE_Y, 18, 18, 256, 256);
+                if (this.blacklistSelection.contains(index)) {
+                    guiGraphics.fill(slotX, slotY, slotX + 16, slotY + 16, BLACKLIST_SELECTED_COLOR);
+                }
+                ItemStack stack = this.blacklistStack(index);
+                if (!stack.isEmpty()) {
+                    guiGraphics.renderItem(stack, slotX, slotY);
+                }
+            }
+        }
+        this.renderBlacklistScrollbar(guiGraphics, left, top);
+    }
+
+    /** 黑名单物品栏右侧的滚动条（和蓝图箱界面同一套画法）。 */
+    private void renderBlacklistScrollbar(GuiGraphics guiGraphics, int left, int top) {
+        int maxScroll = this.blacklistMaxScroll();
+        if (maxScroll <= 0) {
+            return;
+        }
+        int trackX = left + BLACKLIST_SCROLL_TRACK_X;
+        int y = top + BLACKLIST_GRID_Y;
+        int trackHeight = BLACKLIST_VISIBLE_ROWS * 18;
+        guiGraphics.fill(trackX, y, trackX + BLACKLIST_SCROLL_TRACK_WIDTH, y + trackHeight, SLOT_FILL);
+        guiGraphics.fill(trackX, y, trackX + BLACKLIST_SCROLL_TRACK_WIDTH, y + 1, SCROLL_TRACK_DARK);
+        guiGraphics.fill(trackX, y, trackX + 1, y + trackHeight, SCROLL_TRACK_DARK);
+        guiGraphics.fill(trackX, y + trackHeight - 1, trackX + BLACKLIST_SCROLL_TRACK_WIDTH,
+                y + trackHeight, 0xFFFFFFFF);
+        guiGraphics.fill(trackX + BLACKLIST_SCROLL_TRACK_WIDTH - 1, y, trackX + BLACKLIST_SCROLL_TRACK_WIDTH,
+                y + trackHeight, 0xFFFFFFFF);
+        int thumbY = y + (trackHeight - BLACKLIST_SCROLL_HEIGHT) * this.blacklistScroll / maxScroll;
+        guiGraphics.blitSprite(CREATIVE_SCROLLER, left + BLACKLIST_SCROLL_X, thumbY,
+                BLACKLIST_SCROLL_WIDTH, BLACKLIST_SCROLL_HEIGHT);
+    }
+
+    private boolean isOnBlacklistScrollbar(double mouseX, double mouseY) {
+        int x = this.leftPos + BLACKLIST_SCROLL_TRACK_X;
+        int y = this.topPos + BLACKLIST_GRID_Y;
+        int height = BLACKLIST_VISIBLE_ROWS * 18;
+        return mouseX >= x && mouseX < x + BLACKLIST_SCROLL_TRACK_WIDTH && mouseY >= y && mouseY < y + height;
+    }
+
+    private void scrollBlacklistToMouse(double mouseY) {
+        int maxScroll = this.blacklistMaxScroll();
+        if (maxScroll <= 0) {
+            return;
+        }
+        int trackHeight = BLACKLIST_VISIBLE_ROWS * 18;
+        double ratio = (mouseY - this.topPos - BLACKLIST_GRID_Y - BLACKLIST_SCROLL_HEIGHT / 2.0D)
+                / Math.max(1.0D, trackHeight - BLACKLIST_SCROLL_HEIGHT);
+        this.blacklistScroll = Mth.clamp((int) Math.round(ratio * maxScroll), 0, maxScroll);
     }
 
     /** 物品切换页：“交换行”只在指定行模式显示，“循环方向”只在循环模式显示。 */
@@ -482,6 +737,11 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
             guiGraphics.blit(GENERIC_54, slotX - 1, slotY - 1,
                     VANILLA_SLOT_SOURCE_X, VANILLA_SLOT_SOURCE_Y, 18, 18, 256, 256);
         }
+
+        // 连锁破坏页的黑名单物品栏：直接按设置里的列表画格子（不占用菜单槽位）
+        if (this.activeFeature == Feature.CHAIN_MINING && this.blacklistView) {
+            this.renderBlacklistGrid(guiGraphics, left, top);
+        }
     }
 
     @Override
@@ -530,20 +790,28 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
     private void renderChainMiningLabels(GuiGraphics guiGraphics) {
         this.drawContentTitle(guiGraphics);
 
-        // 大量方块（只对石头、泥土、下界岩等生效）
-        guiGraphics.drawString(this.font, Component.translatable("gui.aliyastoolkit.group.massive_blocks"),
-                SETTINGS_X, CHAIN_MASSIVE_LABEL_Y, TEXT_COLOR, false);
+        if (this.blacklistView) {
+            // 黑名单页：格子下面的用法提示
+            int y = this.drawWrapped(guiGraphics,
+                    Component.translatable("gui.aliyastoolkit.settings.chain_blacklist.hint.select"),
+                    SETTINGS_X, BLACKLIST_HINT_Y, HINT_COLOR);
+            this.drawWrapped(guiGraphics, Component.translatable(
+                    "gui.aliyastoolkit.settings.chain_blacklist.hint.add",
+                    AliyasToolkitClient.TOOLKIT_EXIT_KEY.getTranslatedKeyMessage()),
+                    SETTINGS_X, y, HINT_COLOR);
+            return;
+        }
 
-        // 提示：按住连锁键滚动滚轮切换预设（不循环 / 不切换开关）
-        this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.settings.chain.preset_hint",
-                AliyasToolkitClient.CHAIN_MINE_KEY.getTranslatedKeyMessage()), SETTINGS_X, CHAIN_HINT_Y, HINT_COLOR);
+        // 提示：按 Alt + 滚轮切换预设（不循环 / 不切换开关）
+        this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.settings.chain.preset_hint"),
+                SETTINGS_X, CHAIN_HINT_Y, HINT_COLOR);
     }
 
     /** 快速建造页的文字。 */
     private void renderQuickBuildLabels(GuiGraphics guiGraphics) {
         this.drawContentTitle(guiGraphics);
-        this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.build.hint",
-                AliyasToolkitClient.QUICK_BUILD_KEY.getTranslatedKeyMessage()), SETTINGS_X, BUILD_HINT_Y, HINT_COLOR);
+        this.drawWrapped(guiGraphics, Component.translatable("gui.aliyastoolkit.build.hint"),
+                SETTINGS_X, BUILD_HINT_Y, HINT_COLOR);
     }
 
     /** 蓝图建造页的文字：功能说明 + 选区 / 装箱 / 预览建造的用法。 */
@@ -676,12 +944,12 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         }
     }
 
-    /** 预设切换按钮只有 68 宽，名字太长时截断显示（完整名字在下面的文字框里）。 */
+    /** 预设切换按钮只有 84 宽，名字太长时截断显示（完整名字在下面的文字框里）。 */
     private String shortName(String name) {
-        if (this.font.width(name) <= 62) {
+        if (this.font.width(name) <= 78) {
             return name;
         }
-        return this.font.plainSubstrByWidth(name, 54) + "...";
+        return this.font.plainSubstrByWidth(name, 70) + "...";
     }
 
     /** 是否有预设名称文字框正处于编辑状态。 */
@@ -734,7 +1002,70 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 && !this.buildPresetNameField.isMouseOver(mouseX, mouseY)) {
             this.setFocused(null);
         }
+
+        if (this.activeFeature == Feature.CHAIN_MINING && this.blacklistView) {
+            int index = this.blacklistIndexAt(mouseX, mouseY);
+            if (index >= 0 && index < this.settings.chainBlacklist().size()) {
+                // 左键选中、右键取消选中
+                if (button == 0) {
+                    this.blacklistSelection.add(index);
+                } else if (button == 1) {
+                    this.blacklistSelection.remove(index);
+                }
+                this.updateBlacklistButtons();
+                return true;
+            }
+            if (button == 0 && this.blacklistMaxScroll() > 0 && this.isOnBlacklistScrollbar(mouseX, mouseY)) {
+                this.draggingBlacklistScroll = true;
+                this.scrollBlacklistToMouse(mouseY);
+                return true;
+            }
+        }
+
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    /** 黑名单物品栏：滚轮上下滚动（不足 5 行时不拦截）。 */
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (this.activeFeature == Feature.CHAIN_MINING && this.blacklistView
+                && scrollY != 0.0D && this.blacklistMaxScroll() > 0) {
+            this.blacklistScroll = Mth.clamp(
+                    this.blacklistScroll - (int) Math.signum(scrollY), 0, this.blacklistMaxScroll());
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (this.draggingBlacklistScroll) {
+            this.scrollBlacklistToMouse(mouseY);
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (button == 0 && this.draggingBlacklistScroll) {
+            this.draggingBlacklistScroll = false;
+            return true;
+        }
+        return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    /** 悬停在黑名单格子上时显示方块物品的说明。 */
+    @Override
+    protected void renderTooltip(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        if (this.activeFeature == Feature.CHAIN_MINING && this.blacklistView) {
+            ItemStack stack = this.blacklistStack(this.blacklistIndexAt(mouseX, mouseY));
+            if (!stack.isEmpty()) {
+                guiGraphics.renderTooltip(this.font, stack, mouseX, mouseY);
+                return;
+            }
+        }
+        super.renderTooltip(guiGraphics, mouseX, mouseY);
     }
 
     /** side：0=上 1=下 2=左 3=右。 */
@@ -860,6 +1191,8 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
                 Component.translatable(build.fill().translationKey())));
         this.collectFluidsButton.setMessage(Component.translatable(
                 "gui.aliyastoolkit.settings.collect_fluids", onOff(this.settings.collectFluids())));
+        this.recordContentsButton.setMessage(Component.translatable(
+                "gui.aliyastoolkit.settings.record_contents", onOff(this.settings.recordContainerContents())));
 
         // 鼠标悬停时显示这个设置当前可选的全部内容（当前项用 [] 标出）
         this.buildOperationButton.setTooltip(Tooltip.create(buildOptionsTooltip(
@@ -896,6 +1229,7 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         // 名称文字框跟当前预设保持一致（切换/新建/删除预设后）
         this.updateNameFields();
         this.updateHotbarSwapVisibility();
+        this.updateBlacklistButtons();
     }
 
     private static Component onOff(boolean value) {
@@ -920,6 +1254,37 @@ public class ToolkitScreen extends AbstractContainerScreen<ToolkitMenu> {
         return Component.translatable(tooltipKey, list);
     }
 
+
+    /**
+     * 可以“按下”的开关按钮：选中时整体下移 1 像素并盖一层深色，看起来是凹下去的（和蓝图箱的内容切换按钮一致）。
+     */
+    private static class ToggleButton extends Button {
+        private boolean selected;
+
+        ToggleButton(int x, int y, int width, int height, Component message, Button.OnPress onPress,
+                Tooltip tooltip) {
+            super(x, y, width, height, message, onPress, DEFAULT_NARRATION);
+            this.setTooltip(tooltip);
+        }
+
+        void setSelected(boolean selected) {
+            this.selected = selected;
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+            if (!this.selected) {
+                super.renderWidget(guiGraphics, mouseX, mouseY, partialTick);
+                return;
+            }
+            guiGraphics.pose().pushPose();
+            guiGraphics.pose().translate(0.0F, 1.0F, 0.0F);
+            super.renderWidget(guiGraphics, mouseX, mouseY, partialTick);
+            guiGraphics.pose().popPose();
+            guiGraphics.fill(this.getX(), this.getY() + 1, this.getX() + this.getWidth(),
+                    this.getY() + 1 + this.getHeight(), 0x33000000);
+        }
+    }
 
     /**
      * 左键执行 {@code onLeftClick}、右键执行 {@code onRightClick} 的按钮（普通 Button 只认左键）。

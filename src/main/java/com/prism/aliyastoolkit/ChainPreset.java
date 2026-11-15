@@ -10,7 +10,7 @@ import net.minecraft.util.Mth;
 /**
  * 一个“大量方块连锁”预设。
  * <p>
- * 只对石头、泥土、下界岩这类大量生成的方块生效（{@link ModBlockTags#CHAIN_VERTICAL_ONLY}）：
+ * 只对黑名单里的方块（石头、泥土、下界岩这类大量生成的方块）生效（{@link ToolkitSettings#chainBlacklist()}）：
  * <ul>
  * <li>{@code up/down/left/right}：以被破坏的方块为基准、朝前的横截面大小，每项 0-4。
  * 例如 上2 下2 左0 右1 得到的横截面是 2x5。</li>

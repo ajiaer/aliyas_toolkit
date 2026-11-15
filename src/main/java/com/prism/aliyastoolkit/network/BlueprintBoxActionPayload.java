@@ -69,7 +69,7 @@ public record BlueprintBoxActionPayload(BlueprintBoxReference reference, int act
                             Component.translatable("message.aliyastoolkit.blueprint.took_all"), true);
                 }
                 case STORE_ALL -> {
-                    storeAll(player, box);
+                    storeAll(player, box, menu.getViewMode());
                     player.displayClientMessage(
                             Component.translatable("message.aliyastoolkit.blueprint.stored_all"), true);
                 }
@@ -84,11 +84,13 @@ public record BlueprintBoxActionPayload(BlueprintBoxReference reference, int act
         });
     }
 
-    /** 清空蓝图时使用：把箱子里所有物品放进背包；放不下的掉落。 */
+    /** 清空蓝图时使用：把箱子里两栏的物品都放进背包；放不下的掉落。 */
     private static void takeAll(ServerPlayer player, BlueprintBoxView box) {
         for (int slot = 0; slot < box.getContainerSize(); slot++) {
-            ItemStack stack = box.removeItemNoUpdate(slot);
-            giveOrDrop(player, stack);
+            giveOrDrop(player, box.removeItemNoUpdate(slot));
+        }
+        for (int slot = 0; slot < box.getContentCapacity(); slot++) {
+            giveOrDrop(player, box.removeContentItem(slot, Integer.MAX_VALUE));
         }
         box.setChanged();
     }
@@ -99,25 +101,35 @@ public record BlueprintBoxActionPayload(BlueprintBoxReference reference, int act
     private static void takeAllKeepRemainder(ServerPlayer player, BlueprintBoxView box) {
         for (int slot = 0; slot < box.getContainerSize(); slot++) {
             ItemStack stack = box.getItem(slot);
-            if (stack.isEmpty()) {
-                continue;
+            if (!stack.isEmpty()) {
+                ItemStack remainder = stack.copy();
+                player.getInventory().add(remainder);
+                box.setItem(slot, remainder.isEmpty() ? ItemStack.EMPTY : remainder);
             }
-            ItemStack remainder = stack.copy();
-            player.getInventory().add(remainder);
-            box.setItem(slot, remainder.isEmpty() ? ItemStack.EMPTY : remainder);
+        }
+        for (int slot = 0; slot < box.getContentCapacity(); slot++) {
+            ItemStack content = box.getContentItem(slot);
+            if (!content.isEmpty()) {
+                ItemStack remainder = content.copy();
+                player.getInventory().add(remainder);
+                box.setContentItem(slot, remainder.isEmpty() ? ItemStack.EMPTY : remainder);
+            }
         }
         box.setChanged();
     }
 
-    /** 把背包里符合占位要求的物品放进箱子，最多到每格上限。 */
-    private static void storeAll(ServerPlayer player, BlueprintBoxView box) {
-        for (int slot = 0; slot < box.getContainerSize(); slot++) {
-            int limit = box.getLimit(slot);
-            var def = box.getSlotDef(slot);
+    /** 把背包里符合占位要求的物品放进当前显示的那一栏，最多到每格上限。 */
+    private static void storeAll(ServerPlayer player, BlueprintBoxView box, int viewMode) {
+        boolean contents = viewMode == 1;
+        int slots = contents ? box.getContentCapacity() : box.getContainerSize();
+        for (int slot = 0; slot < slots; slot++) {
+            int limit = contents ? box.getContentLimit(slot) : box.getLimit(slot);
+            var def = contents ? box.getContentSlotDef(slot) : box.getSlotDef(slot);
             if (limit <= 0 || def == null) {
                 continue;
             }
-            int space = limit - box.getItem(slot).getCount();
+            ItemStack current = contents ? box.getContentItem(slot) : box.getItem(slot);
+            int space = limit - current.getCount();
             if (space <= 0) {
                 continue;
             }
@@ -133,12 +145,14 @@ public record BlueprintBoxActionPayload(BlueprintBoxReference reference, int act
                 if (taken.isEmpty()) {
                     continue;
                 }
-                ItemStack current = box.getItem(slot);
-                if (current.isEmpty()) {
-                    box.setItem(slot, taken);
-                } else {
-                    ItemStack merged = current.copy();
+                current = contents ? box.getContentItem(slot) : box.getItem(slot);
+                ItemStack merged = current.isEmpty() ? taken : current.copy();
+                if (!current.isEmpty()) {
                     merged.grow(taken.getCount());
+                }
+                if (contents) {
+                    box.setContentItem(slot, merged);
+                } else {
                     box.setItem(slot, merged);
                 }
                 space -= taken.getCount();

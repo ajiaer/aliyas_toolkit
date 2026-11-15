@@ -26,7 +26,9 @@ public class BlueprintBoxItemContainer implements BlueprintBoxView {
     private ItemStack trackedStack = ItemStack.EMPTY;
     private int capacity;
     private NonNullList<ItemStack> items = NonNullList.withSize(0, ItemStack.EMPTY);
+    private NonNullList<ItemStack> contentItems = NonNullList.withSize(0, ItemStack.EMPTY);
     private int[] limits = new int[0];
+    private FluidTank tank = FluidTank.empty(0);
     @Nullable
     private BlueprintData blueprint;
     private List<BlueprintData.SlotDef> slotDefs = List.of();
@@ -58,9 +60,15 @@ public class BlueprintBoxItemContainer implements BlueprintBoxView {
     private void refresh() {
         this.trackedStack = this.currentStack();
         this.capacity = BlueprintBoxData.capacity(this.trackedStack);
+        int tankCapacity = this.trackedStack.getItem() instanceof BlueprintBoxItem boxItem
+                ? boxItem.tier().tankCapacity() : 0;
+        int contentCapacity = this.trackedStack.getItem() instanceof BlueprintBoxItem contentBox
+                ? contentBox.tier().contentSlots() : 0;
         if (this.capacity <= 0) {
             this.items = NonNullList.withSize(0, ItemStack.EMPTY);
+            this.contentItems = NonNullList.withSize(0, ItemStack.EMPTY);
             this.limits = new int[0];
+            this.tank = FluidTank.empty(0);
             this.blueprint = null;
             this.slotDefs = List.of();
             return;
@@ -70,6 +78,8 @@ public class BlueprintBoxItemContainer implements BlueprintBoxView {
         this.slotDefs = this.blueprint == null ? List.of() : this.blueprint.createSlots(this.capacity);
         this.limits = BlueprintBoxData.readOrCreateLimits(this.trackedStack, this.blueprint, this.capacity);
         this.items = BlueprintBoxData.readItems(this.trackedStack, this.capacity);
+        this.contentItems = BlueprintBoxData.readContentItems(this.trackedStack, contentCapacity, registries);
+        this.tank = BlueprintBoxData.readTank(this.trackedStack, tankCapacity);
     }
 
     private void persist() {
@@ -83,7 +93,9 @@ public class BlueprintBoxItemContainer implements BlueprintBoxView {
         }
         HolderLookup.Provider registries = this.player.level().registryAccess();
         BlueprintBoxData.writeItems(stack, this.items);
+        BlueprintBoxData.writeContentItems(stack, this.contentItems, registries);
         BlueprintBoxData.writeBlueprint(stack, this.blueprint, this.limits, registries);
+        BlueprintBoxData.writeTank(stack, this.tank);
     }
 
     @Override
@@ -95,6 +107,84 @@ public class BlueprintBoxItemContainer implements BlueprintBoxView {
     public int getCapacity() {
         this.refreshIfNeeded();
         return this.capacity;
+    }
+
+    @Override
+    public int getContentCapacity() {
+        this.refreshIfNeeded();
+        return this.trackedStack.getItem() instanceof BlueprintBoxItem boxItem
+                ? boxItem.tier().contentSlots() : 0;
+    }
+
+    @Override
+    public int getTankCapacity() {
+        this.refreshIfNeeded();
+        return this.trackedStack.getItem() instanceof BlueprintBoxItem boxItem
+                ? boxItem.tier().tankCapacity() : 0;
+    }
+
+    @Override
+    public FluidTank getTank() {
+        this.refreshIfNeeded();
+        return this.tank;
+    }
+
+    @Override
+    public void setTank(FluidTank tank) {
+        this.refreshIfNeeded();
+        this.tank = tank == null ? FluidTank.empty(this.getTankCapacity()) : tank;
+        this.setChanged();
+    }
+
+    @Override
+    public ItemStack getContentItem(int slot) {
+        this.refreshIfNeeded();
+        return slot >= 0 && slot < this.contentItems.size() ? this.contentItems.get(slot) : ItemStack.EMPTY;
+    }
+
+    @Override
+    public void setContentItem(int slot, ItemStack stack) {
+        this.refreshIfNeeded();
+        if (slot < 0 || slot >= this.contentItems.size() || isNestedBlueprintBox(stack)) {
+            return;
+        }
+        if (this.player.level().isClientSide) {
+            this.contentItems.set(slot, stack.copy());
+            return;
+        }
+        int limit = this.getContentLimit(slot);
+        BlueprintData.SlotDef def = this.getContentSlotDef(slot);
+        if (limit <= 0 || def == null) {
+            if (stack.isEmpty()) {
+                this.contentItems.set(slot, ItemStack.EMPTY);
+                this.setChanged();
+            }
+            return;
+        }
+        if (!stack.isEmpty() && !def.matches(stack)) {
+            return;
+        }
+        ItemStack stored = stack.getCount() > limit ? stack.copyWithCount(limit) : stack;
+        this.contentItems.set(slot, stored);
+        this.setChanged();
+    }
+
+    @Override
+    public ItemStack removeContentItem(int slot, int amount) {
+        this.refreshIfNeeded();
+        if (slot < 0 || slot >= this.contentItems.size() || amount <= 0) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack stack = this.contentItems.get(slot);
+        if (stack.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack removed = stack.split(amount);
+        if (stack.isEmpty()) {
+            this.contentItems.set(slot, ItemStack.EMPTY);
+        }
+        this.setChanged();
+        return removed;
     }
 
     public Component getDisplayName() {

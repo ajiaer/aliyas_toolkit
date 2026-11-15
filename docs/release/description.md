@@ -57,14 +57,18 @@ When a whitelisted item disappears from your hotbar — because it was used up, 
 Tap **Z** to toggle chain mining. The toggle is applied when you release the key. While it is active, breaking a block also breaks connected blocks of the same type.
 
 - **Chain Limit** controls how many blocks can be broken at once. The default is 64; the range is 1–256.
-- **Massive Blocks** presets cover common materials such as stone, dirt, and netherrack. Each preset defines a cross-section and a number of layers in the direction you are facing.
+- **Massive Blocks** presets cover the blocks on your **blacklist**. Each preset defines a cross-section and a number of layers in the direction you are facing.
+- **Blacklist page**: the toggle under the chain limit switches the preset area to an inventory-style grid (5 rows visible out of 16, with a scroll bar) that lists the blocks using the preset plan. It starts with common massive blocks such as stone, cobblestone, deepslate, netherrack, and end stone.
+- **Delete / Add**: left click a block to select it (red background), right click to deselect, then press **Delete**. **Add** temporarily closes the screen, marks the targeted block with a white thick outline, and adds it when you left click; press the back key (default `` ` ``) to return without adding.
 - **Allow Other Blocks** lets the same shape break other breakable blocks in the area. Turn it off to break only the block type you started with.
 - Drops are gathered at the origin and merged where possible, so the ground does not fill with scattered items.
-- Hold **Z** and scroll to change the massive-block preset.
+- With chain mining on, press **Alt** and scroll to change the massive-block preset.
 
 ## Quick build
 
-Tap **C** to toggle quick build. The toggle is applied when you release the key. Hold **C** and scroll to change the current preset. Before the first point is selected, a green target outline follows your crosshair so you can see that quick build is active.
+Tap **C** to toggle quick build. The toggle is applied when you release the key. With quick build on, press **Alt** and scroll to change the current preset. Before the first point is selected, a green target outline follows your crosshair so you can see that quick build is active.
+
+When your crosshair is not pointing at a block, the indicator appears at the **default position distance** in front of you (2 blocks by default). Hold **Ctrl** and scroll while quick build is on to change it between 2 and 8 blocks; the action bar shows the new distance.
 
 1. Right-click the first corner to set the start point. A preview shows the planned shape and the number of blocks needed.
 2. Right-click a second time to set the end point. The mod checks the block in your main hand and the available materials.
@@ -95,10 +99,10 @@ Before the first point is selected, a pale-yellow target outline follows your cr
 - A later right-click selection can add back an area that was previously removed; selections are applied in operation order.
 - You can add or remove several selections in a row.
 - Hold **Shift** while choosing a position to snap it to the outer face of the block you are pointing at.
-- Press **Ctrl + left-click** anywhere to record the structure and collect its materials (cut). The mod reads the area again, collects the required block items, container contents, and fluid buckets into the blueprint box, and removes the source blocks.
+- Press **Ctrl + left-click** anywhere to record the structure and collect its materials (cut). The mod reads the area again, collects the required block items into the blueprint box, stores fluid sources in the box tank, and removes the source blocks.
 - Press **Ctrl + right-click** anywhere to record the blueprint only (copy). The source blocks stay in place, and no materials are put into the box.
 - Blueprint boxes themselves are filtered out of the recording, so a blueprint cannot collect another blueprint box by accident.
-- Container contents are recorded as part of the material cost. When the structure is built, those contents are restored.
+- Container contents are recorded and shown in the second view; items placed there are restored into the built containers, and missing items simply stay missing.
 - Both recording actions exit draw mode.
 
 ### Build a blueprint
@@ -108,8 +112,10 @@ Before the first point is selected, a pale-yellow target outline follows your cr
 - Press **V** to rotate the ghost by 90 degrees around the vertical axis.
 - Right-click to pin the ghost in place so you can walk around and inspect it; left-click to unpin it.
 - While the ghost is pinned, press **Ctrl + right-click** to check materials and build.
-- If the materials are sufficient, the required blocks, container contents, and buckets are taken from the blueprint box and the structure is built. If not, a message is shown and blueprint mode exits.
+- If the materials and tank fluid are sufficient, the required blocks are taken from the blueprint box, the fluid is taken from the tank, and the structure is built. If not, a message is shown and blueprint mode exits.
 - The ghost is slightly easier to see and only draws visible block faces; the blueprint outline remains fully visible. The outline is green when you have enough materials to build, and red when you do not.
+- Only faces that point at you are drawn: chests and other block-entity blocks are no longer transparent, interior faces between adjacent ghosts are hidden, and the ghost is rendered after the clouds so clouds never cover it.
+- Fluid sources in the blueprint (water, lava, ...) are shown in the ghost as translucent blocks in the fluid's color, with the same visible-face handling.
 
 The ghost searches for a valid placement position within a radius of **8 blocks** around the indicator. Boxes, shulker boxes, beds, and other animated blocks are shown with their real appearance in the preview.
 
@@ -119,29 +125,41 @@ This option is **on by default** and can be changed in **Alt + X → Blueprint B
 
 When recording, the mod finds fluid sources that can be picked up with a bucket, such as water and lava.
 
-- In **cut mode** (**Ctrl + left-click**), it checks for empty buckets in your inventory, hotbar, and offhand. If enough are available, they are consumed and the filled buckets become part of the blueprint's material list. If not, the fluid source is skipped with a message, and the rest of the blueprint is still recorded.
-- In **copy mode** (**Ctrl + right-click**), fluid sources are included in the blueprint without consuming empty buckets or adding filled buckets. Bring the required buckets when you build.
+- In **cut mode** (**Ctrl + left-click**), fluid sources are recorded and the fluid is stored in the blueprint box **tank** (1000 mB per source). If the tank is too small, a message shows the required and available amounts and the blueprint is not created.
+- In **copy mode** (**Ctrl + right-click**), fluid sources are included in the blueprint without collecting fluid. Fill the tank with buckets before you build.
 
 Turn the option off if you want fluid sources to be ignored completely.
+
+### Record container items
+
+This option is **on by default** and can be changed in **Alt + X → Blueprint Build**.
+
+- **On:** the blueprint stores the items inside containers. Put them into the content column and they are restored into the built containers; shulker boxes are recorded as the shulker box item itself, so their contents travel with the item.
+- **Off:** containers are recorded empty. When cutting, the items inside containers drop on the spot instead of disappearing.
 
 ## Blueprint boxes
 
 Blueprint boxes are chest-like storage blocks that hold a blueprint and the materials needed to build it. They come in six tiers:
 
-| Blueprint box | Storage slots | How to obtain |
-| --- | --- | --- |
-| Blueprint Box | 27 (3×9) | Chest + 8 paper |
-| Copper Blueprint Box | 45 (5×9) | Blueprint Box + 8 copper ingots |
-| Iron Blueprint Box | 63 (7×9) | Copper Blueprint Box + 8 iron ingots |
-| Gold Blueprint Box | 81 (9×9) | Iron Blueprint Box + 8 gold ingots |
-| Diamond Blueprint Box | 108 (12×9) | Gold Blueprint Box + 8 diamonds |
-| Netherite Blueprint Box | 144 (16×9) | Smithing Table: Diamond Blueprint Box + netherite ingot + netherite upgrade template |
+| Blueprint box | Storage slots | Content column | Fluid tank | How to obtain |
+| --- | --- | --- | --- | --- |
+| Blueprint Box | 27 (3×9) | 9 (1×9) | 2000 mB | Chest + 8 paper |
+| Copper Blueprint Box | 45 (5×9) | 18 (2×9) | 4000 mB | Blueprint Box + 8 copper ingots |
+| Iron Blueprint Box | 63 (7×9) | 27 (3×9) | 8000 mB | Copper Blueprint Box + 8 iron ingots |
+| Gold Blueprint Box | 81 (9×9) | 36 (4×9) | 16000 mB | Iron Blueprint Box + 8 gold ingots |
+| Diamond Blueprint Box | 108 (12×9) | 45 (5×9) | 32000 mB | Gold Blueprint Box + 8 diamonds |
+| Netherite Blueprint Box | 144 (16×9) | 54 (6×9) | 64000 mB | Smithing Table: Diamond Blueprint Box + netherite ingot + netherite upgrade template |
 
 To open the blueprint box you are holding, press **Alt + right-click**. The same interface can be opened by right-clicking a placed blueprint box.
 
-- The screen shows five rows at a time; use the scroll bar or mouse wheel to reach the rest.
+- The screen shows five rows at a time; use the scroll bar or mouse wheel to reach the rest. The three action buttons sit to the right of your inventory.
 - An empty box shows disabled slots. After a blueprint is recorded, ghost placeholders show which items are needed and how many.
 - **Clear** returns the stored items and removes the blueprint. **Quick Take** moves the stored items to your inventory while keeping the blueprint. **Store All** moves matching items from your inventory into the box.
+- Every tier has a vertical **fluid tank** gauge at the top right (capacity grows with the tier): stored fluid is drawn in the fluid's own color (sampled from the fluid texture and multiplied by its tint), the part the blueprint still needs is drawn in a pale version of the same color, and unused capacity stays disabled. Hovering a section shows the stored amount, the tank capacity and the blueprint requirement, and widens that section.
+- With an empty bucket in hand, click a fluid section to take out one bucket (1000 mB). With a filled fluid bucket, click anywhere on the tank to store that bucket. The tank never holds more than the blueprint needs: filling past that or storing a fluid the blueprint does not use shows a message.
+- The button left of the tank is a vanilla-style square button with a chest icon (no outer black border): raised by default and shows the box materials; click it (it pops in) to show the items stored inside containers instead. Shulker boxes and similar containers are not expanded: the blueprint only records the shulker box item, and its contents stay with the item itself (its tooltip lists them and taking it out keeps them), so it takes a single slot in the materials column. The content column accepts items too and is restored into the built containers as far as the items are available, so missing container items never block a build.
+- Recording requires all container contents to fit in the content column. If they need more slots than it has, a message shows the needed and available slot counts and the recording is cancelled (nothing is truncated or skipped), so items are not left behind and machine inventories stay exact.
+- The content column shows only its own number of rows (one row on the base box, two on copper, and so on); rows beyond its capacity are not drawn and cannot be used.
 - Blueprint boxes work with hoppers and comparators like a chest. They always stay single and cannot be placed inside another blueprint box.
 - All blueprint boxes float in water. Copper and higher tiers resist fire and lava; diamond and higher tiers resist explosions; netherite drops also survive lava and are moved to a safe place if they fall into the void.
 - Renaming a blueprint box in an anvil keeps its contents and blueprint. Breaking a placed box keeps its items, blueprint, and stored contents.
@@ -152,9 +170,9 @@ Press **Alt + X** to open the settings screen. The five tabs are:
 
 - **Item Switching** — choose Specific Row / Cycle, the inventory row for Specific Row mode, and the cycle direction.
 - **Automatic Refill** — turn Exact Match on or off and edit the nine-slot whitelist.
-- **Chain Mining** — set the chain limit, massive-block presets, direction lock, and whether other blocks may be broken.
+- **Chain Mining** — set the chain limit, massive-block presets, direction lock, and whether other blocks may be broken. The **Blacklist** toggle swaps the preset area for an inventory-style grid (5 rows of 16, scrollable) where you can delete blocks or add the block you are looking at.
 - **Quick Build** — choose, create, or delete presets and set the operation, dimension, shape, and fill.
-- **Blueprint Build** — toggle automatic fluid collection and see the current blueprint controls. The key names in the hints follow your actual key bindings.
+- **Blueprint Build** — toggle automatic fluid collection and container item recording, and see the current blueprint controls. The key names in the hints follow your actual key bindings.
 
 Your whitelist and settings are stored per player. They are saved with your player data and survive death and respawn.
 
@@ -167,16 +185,17 @@ For multiplayer, install the mod on **both the client and the server**. Each pla
 | Open Aliya's Toolkit settings | **Alt + X** |
 | Switch hotbar (Specific Row / Cycle) | **X** |
 | Toggle chain mining | Tap **Z** |
-| Change massive-block preset | Hold **Z** and scroll |
+| Change massive-block preset | **Alt** + scroll (chain mining on) |
 | Toggle quick build | Tap **C** |
-| Change quick-build preset | Hold **C** and scroll |
+| Change quick-build preset | **Alt** + scroll (quick build on) |
+| Change quick-build default distance | **Ctrl** + scroll (quick build on, 2-8 blocks) |
 | Open the blueprint box in your hand | **Alt + right-click** |
 | Blueprint draw: record and collect (cut) | **Ctrl + left-click** |
 | Blueprint build: enter, record copy, or build | **Ctrl + right-click** |
 | Blueprint build: switch draw/build mode | **Tab** (box must have no items) |
 | Blueprint draw: snap to a block face | Hold **Shift** |
-| Blueprint build: rotate the ghost | **V** (before pinning) |
-| Blueprint build: pin or unpin the ghost | Right-click / left-click |
+| Blueprint build: rotate the preview | **V** (before pinning) |
+| Blueprint build: pin or unpin the preview | Right-click / left-click |
 | Exit chain mining / quick build / blueprint build | `` ` `` |
 | Blueprint build: change ghost distance | Scroll |
 
@@ -258,14 +277,18 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 短按 **Z** 切换连锁破坏，松开按键时生效。开启后，挖掉一个方块会同时破坏周围相连的同类方块。
 
 - **连锁数量** 控制一次最多破坏多少格，默认 64，范围 1–256。
-- **大量方块** 预设适用于石头、泥土、下界岩等常见材料，可以设置横截面和沿朝向前方延伸的层数。
+- **大量方块** 预设适用于**黑名单**里的方块，可以设置横截面和沿朝向前方延伸的层数。
+- **黑名单页**：连锁数量下面的“黑名单”按钮点下后，下面的预设区换成类似物品栏的格子（可见 5 行、共 16 行，带滚动条），列出使用预设方案的方块；默认已放入石头、圆石、深板岩、下界岩、末地岩等常见大量方块。
+- **删除 / 添加**：左键选中方块（红色底色）、右键取消选中，再点“删除”。点“添加”会暂时关闭界面，准星指向的方块显示白色粗框，左键点它即可加入；按返回键（默认 `` ` ``）直接返回、不添加。
 - **允许其它方块** 开启时，形状范围内的其它可破坏方块也会一起破坏；关闭后只破坏与起点相同的方块。
 - 掉落物会集中到起点并尽量合并，不会散落一地。
-- 按住 **Z** 滚动滚轮可以切换大量方块预设。
+- 连锁破坏开启时，**Alt** + 滚轮可以切换大量方块预设。
 
 ## 快速建造
 
-短按 **C** 切换快速建造，松开按键时生效；按住 **C** 滚动滚轮可以切换预设。第一次选点前，目标格会跟随准星显示绿色轮廓，便于确认快速建造已开启。
+短按 **C** 切换快速建造，松开按键时生效；快速建造开启时，**Alt** + 滚轮可以切换预设。第一次选点前，目标格会跟随准星显示绿色轮廓，便于确认快速建造已开启。
+
+准星没有指向方块时，指示器会出现在身前的**默认位置距离**处（默认 2 格）。快速建造开启时按住 **Ctrl** + 滚轮可以在 2-8 格之间调整，动作栏会显示当前距离。
 
 1. 第一次右键设置起点，界面会显示规划轮廓和所需方块数量。
 2. 第二次右键设置终点，模组会检查主手方块和可用材料。
@@ -296,10 +319,10 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 - 之后右键扩选可以重新覆盖之前删除的区域；选区按操作顺序生效。
 - 可以连续多次添加或删除选区。
 - 选点时按住 **Shift**，可以把点吸附到指向方块的外侧面。
-- 按 **Ctrl + 左键** 记录结构并收取材料（剪切）：模组会重新读取区域，把方块物品、容器内容和流体桶收进蓝图箱，并清除源方块。
+- 按 **Ctrl + 左键** 记录结构并收取材料（剪切）：模组会重新读取区域，把方块物品收进蓝图箱、把流体收进储罐，并清除源方块。
 - 按 **Ctrl + 右键** 只记录蓝图（复制）：源方块保持不变，也不会向蓝图箱放入材料。
 - 蓝图箱本身会被过滤，避免把另一个蓝图箱错误地收进蓝图。
-- 容器里的内容会作为材料需求记录，建造后会放回原来的容器和槽位。
+- 容器里的内容会被记录到第二栏，把对应物品放进去，建造时会按原容器、原槽位回填；缺货的部分就空着。
 - 两种记录方式都会退出绘制模式。
 
 ### 建造蓝图
@@ -309,8 +332,10 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 - 按 **V** 让虚影绕竖直轴旋转 90°。
 - 右键固定虚影，方便走近查看；左键解除固定。
 - 固定后按 **Ctrl + 右键** 检查材料并建造。
-- 材料足够时，会从蓝图箱扣除方块、容器内容和流体桶，然后开始建造；材料不足时会提示并退出蓝图模式。
+- 材料足够时，会从蓝图箱扣除方块、从储罐扣除流体，然后开始建造；材料或流体不足时会提示并退出蓝图模式。
 - 虚影透明度略微提高，只绘制玩家可见的方块面；蓝图轮廓线仍然正常显示：材料足够时可以建造，轮廓为绿色；材料不足时为红色。
+- 虚影只绘制朝向玩家的面：箱子等实体方块不会透视，相邻虚影之间的内部面会被挡住；虚影在云层之后渲染，云不会盖在虚影前面。
+- 蓝图里的流体源头（水、岩浆等）会在虚影中按流体颜色显示为半透明方块，同样只显示可见面。
 
 虚影会在指示器周围半径 **8 格**的范围内寻找合法位置。箱子、潜影盒、床等方块在预览中会显示真实外观。
 
@@ -320,29 +345,41 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 
 记录蓝图时，模组会识别可以用桶接取的流体源头，例如水和岩浆。
 
-- **剪切模式**（**Ctrl + 左键**）：检查背包、快捷栏和副手是否有足够的空桶。空桶足够时消耗空桶，把装满的桶作为蓝图材料放进蓝图箱；空桶不足时提示并跳过该流体源头，但其它方块仍然会被记录。
-- **复制模式**（**Ctrl + 右键**）：把流体源头记录进蓝图，但不消耗空桶，也不放入装满的桶；建造时需要自行准备对应的桶。
+- **剪切模式**（**Ctrl + 左键**）：把流体源头记录进蓝图，并把流体存进蓝图箱的**储罐**（每个源头 1000 mB）；储罐装不下时提示需求 / 容量，并放弃创建蓝图。
+- **复制模式**（**Ctrl + 右键**）：把流体源头记录进蓝图，但不收集流体；建造前需要自己用桶把流体补进储罐。
 
 关闭该选项后，流体源头不会参与蓝图。
+
+### 记录容器内物品
+
+默认开启，可在 **Alt + X → 蓝图建造** 中关闭。
+
+- **开启**：蓝图会记录容器里的物品，放进第二栏后建造时会回填到新容器；潜影盒按原版方式只记录成“装着物品的潜影盒物品”，内容随物品本身走。
+- **关闭**：容器只记录方块本身，建成后是空的；剪切时容器里的物品会掉在原地，不会凭空消失。
 
 ## 蓝图箱
 
 蓝图箱是类似箱子的储物方块，用来保存蓝图和建造材料。共有六个等级：
 
-| 蓝图箱 | 容量 | 获取方式 |
-| --- | --- | --- |
-| 蓝图箱 | 27（3×9） | 箱子 + 8 张纸 |
-| 铜制蓝图箱 | 45（5×9） | 蓝图箱 + 8 个铜锭 |
-| 铁制蓝图箱 | 63（7×9） | 铜制蓝图箱 + 8 个铁锭 |
-| 金制蓝图箱 | 81（9×9） | 铁制蓝图箱 + 8 个金锭 |
-| 钻石蓝图箱 | 108（12×9） | 金制蓝图箱 + 8 个钻石 |
-| 下界合金蓝图箱 | 144（16×9） | 锻造台：钻石蓝图箱 + 下界合金锭 + 下界合金升级模板 |
+| 蓝图箱 | 容量 | 内容栏 | 储罐 | 获取方式 |
+| --- | --- | --- | --- | --- |
+| 蓝图箱 | 27（3×9） | 9（1×9） | 2000 mB | 箱子 + 8 张纸 |
+| 铜制蓝图箱 | 45（5×9） | 18（2×9） | 4000 mB | 蓝图箱 + 8 个铜锭 |
+| 铁制蓝图箱 | 63（7×9） | 27（3×9） | 8000 mB | 铜制蓝图箱 + 8 个铁锭 |
+| 金制蓝图箱 | 81（9×9） | 36（4×9） | 16000 mB | 铁制蓝图箱 + 8 个金锭 |
+| 钻石蓝图箱 | 108（12×9） | 45（5×9） | 32000 mB | 金制蓝图箱 + 8 个钻石 |
+| 下界合金蓝图箱 | 144（16×9） | 54（6×9） | 64000 mB | 锻造台：钻石蓝图箱 + 下界合金锭 + 下界合金升级模板 |
 
 主手拿着蓝图箱按 **Alt + 右键** 可以打开界面；右键放在世界里的蓝图箱也可以打开同样的界面。
 
-- 界面一次显示五行，使用右侧滚动条或滚轮查看剩余槽位。
+- 界面一次显示五行，使用右侧滚动条或滚轮查看剩余槽位；三个操作按钮在玩家物品栏右边。
 - 没有蓝图时槽位是禁用的；记录蓝图后会显示半透明占位和每格需要的数量。
 - **清空蓝图** 会把物品放回背包并移除蓝图；**一键取出** 会取出物品但保留蓝图；**一键存入** 会把背包中符合条件的物品放进箱子。
+- 每一级右上角都有竖着的**储罐**刻度条（容量随等级提高）：已存流体用流体本身的颜色显示（取流体贴图平均色再乘染色值），蓝图需要但还没放进去的部分显示同色浅色，未使用的部分保持禁用底色；悬停会显示存量 / 容量和蓝图需求，悬停的一段会加宽。
+- 空桶点某一段流体可以取出 1 桶；液体桶点储罐任意位置可以存入 1 桶。存量不会超过蓝图对该流体的需求，超出或蓝图不需要这种流体时会提示。
+- 储罐左边的切换按钮是原版风格的小方按钮（中间一个箱子图标，没有最外层黑边）：默认凸起，显示蓝图箱材料；点一下凹下去，改为显示蓝图内容器里的物品。潜影盒这类容器不展开：蓝图只记录潜影盒这个物品，里面的东西由潜影盒本身记录（悬停能看到内容，取出后也是完整的），第一栏只占一个容器物品。第二栏也可以放物品，建造时会按“有多少放多少”回填到普通容器原来的位置，缺货不会阻止建造。
+- 记录蓝图时，容器内容物必须能完整放进第二栏：超出容量会提示“需要多少格 / 只有多少格”并取消记录，不截断、不跳过，避免物品散落在原地或特殊机器里的数量对不上。
+- 第二栏显示的行数按它自己的容量算（蓝图箱 1 行、铜制 2 行……），不沿用第一栏的行数；超出容量的行不绘制，也不能使用。
 - 蓝图箱可以像普通箱子一样配合漏斗和比较器使用；始终是单箱，不能放进另一个蓝图箱。
 - 所有蓝图箱在水中都会上浮。铜制及以上防火、防岩浆；钻石及以上防爆炸；下界合金掉落物还能在岩浆中保留，并从虚空回到附近安全位置。
 - 铁砧改名会保留内容和蓝图；破坏已放置的蓝图箱也会保留物品、蓝图和容器内容。
@@ -353,9 +390,9 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 
 - **物品切换**：选择指定行 / 循环模式、指定行号以及循环方向。
 - **自动补充**：开关“完全一致”，编辑九格白名单。
-- **连锁破坏**：设置连锁数量、大量方块预设、方向锁定和是否允许其它方块。
+- **连锁破坏**：设置连锁数量、大量方块预设、方向锁定和是否允许其它方块；“黑名单”开关会把预设区换成类似物品栏的格子（16 行里显示 5 行，可滚动），可以删除方块，或把准星指向的方块加进去。
 - **快速建造**：选择、新建或删除预设，设置操作、维度、形状和填充方式。
-- **蓝图建造**：开关自动收集流体，并查看绘制、建造、缩放、旋转、打开箱子等操作提示；提示中的按键会跟随你的实际按键绑定。
+- **蓝图建造**：开关自动收集流体和记录容器内物品，并查看绘制、建造、缩放、旋转、打开箱子等操作提示；提示中的按键会跟随你的实际按键绑定。
 
 白名单和所有设置都按玩家保存，死亡和重生后仍然保留。
 
@@ -368,15 +405,16 @@ This mod was made with **1% inspiration and 99% AI**. It is a small personal too
 | 打开 Aliya的工具包 设置 | **Alt + X** |
 | 快捷栏切换（指定行 / 循环） | **X** |
 | 开关连锁破坏 | 短按 **Z** |
-| 切换大量方块预设 | 按住 **Z** 滚动滚轮 |
+| 切换大量方块预设 | **Alt** + 滚轮（连锁破坏开启时） |
 | 开关快速建造 | 短按 **C** |
-| 切换快速建造预设 | 按住 **C** 滚动滚轮 |
+| 切换快速建造预设 | **Alt** + 滚轮（快速建造开启时） |
+| 调整快速建造默认位置距离 | **Ctrl** + 滚轮（快速建造开启时，2-8 格） |
 | 打开主手蓝图箱 | **Alt + 右键** |
 | 蓝图绘制：记录并收取（剪切） | **Ctrl + 左键** |
 | 蓝图建造：进入、记录复制或建造 | **Ctrl + 右键** |
 | 蓝图建造：切换绘制/建造模式 | **Tab**（箱子必须没有物品） |
 | 蓝图绘制：吸附方块外侧面 | 按住 **Shift** |
-| 蓝图建造：旋转虚影 | **V**（固定之前） |
+| 蓝图建造：旋转预览 | **V**（固定之前） |
 | 蓝图建造：固定/解除固定虚影 | 右键 / 左键 |
 | 退出连锁破坏 / 快速建造 / 蓝图建造 | `` ` `` |
 | 蓝图建造：调整虚影距离 | 滚轮 |

@@ -34,12 +34,13 @@
 
 1. **Hotbar switching** (`X`): swap the hotbar with a chosen inventory row, or cycle the three inventory rows and the hotbar in forward/reverse order, without opening the inventory. Switching does not trigger auto-refill.
 2. **Automatic refill**: whitelisted hotbar items are moved back from the inventory when they disappear. Optional exact item/component matching; durability is ignored.
-3. **Chain mining** (`Z` toggle): break connected identical blocks, with a configurable chain limit and a massive-block preset (cross-section + layers + direction). Drops are collected and merged at the origin.
+3. **Chain mining** (`Z` toggle): break connected identical blocks, with a configurable chain limit and a massive-block preset (cross-section + layers + direction) that applies to a per-player **blacklist** of blocks (editable in the settings screen, 16 rows with scrolling). Drops are collected and merged at the origin.
 4. **Quick build** (`C` toggle): a green target outline follows your crosshair before the first point; mark two points, choose operation / dimension / shape / fill, and build with the block in your main hand. Up to 4096 blocks, 64-block reach, server validation.
 5. **Blueprint build**: hold any blueprint box and press `Ctrl + right click`. An empty blueprint enters draw mode; an existing blueprint enters build mode. The entry prompt names the current mode as **Blueprint Build: Draw Mode** or **Blueprint Build: Build Mode**, and the target outline follows your crosshair before the first point. Draw with right/left clicks, snap points to block faces with `Shift`, press `Ctrl + left click` to record and collect materials (cut), or `Ctrl + right click` to record the blueprint only (copy). Preview with a ghost, pin/unpin with right/left click, and build with `Ctrl + right click`.
-6. **Blueprint boxes**: 6 tiers from 27 to 144 slots, vanilla chest model and lid animation, 5×9 scrollable screen, ghost placeholders, material checking, hopper/comparator support, and per-tier fire/explosion/void protection.
-7. **Auto Collect Fluids** (default ON): in cut mode, bucketable fluid sources are recorded and collected into filled buckets if enough empty buckets are available; otherwise a message is shown and fluids are skipped without cancelling the blueprint. In copy mode, fluid sources are recorded without consuming buckets or adding filled buckets.
-8. **Per-player settings**: open with `Alt + X`; all values are saved with player data and survive death / respawn.
+6. **Blueprint boxes**: 6 tiers from 27 to 144 slots, each with a fluid tank (2000 mB up to 64000 mB) and a second column for container contents (9 to 54 slots), vanilla chest model and lid animation, 5×9 scrollable screen, ghost placeholders, material checking, hopper/comparator support, and per-tier fire/explosion/void protection.
+7. **Auto Collect Fluids** (default ON): in cut mode, bucketable fluid sources are recorded and collected into the blueprint box tank; if the tank is too small, you get a message and the blueprint is not created. In copy mode, fluid sources are recorded without collecting fluid.
+8. **Record Container Items** (default ON): blueprint recording stores the items inside containers, and shulker boxes keep their contents in the box item itself; turn it off to record empty containers (items inside cut containers drop on the spot).
+9. **Per-player settings**: open with `Alt + X`; all values are saved with player data and survive death / respawn.
 
 ## Default keys
 
@@ -48,15 +49,16 @@
 | Open Aliya's Toolkit settings | `Alt + X` |
 | Switch hotbar row / cycle | `X` |
 | Toggle chain mining | Tap `Z` (applies on release) |
-| Cycle massive-block preset | Hold `Z` and scroll |
+| Cycle massive-block preset | `Alt` + scroll while chain mining is on |
 | Toggle quick build | Tap `C` (applies on release) |
-| Cycle quick-build preset | Hold `C` and scroll |
+| Cycle quick-build preset | `Alt` + scroll while quick build is on |
+| Adjust quick-build default distance | `Ctrl` + scroll while quick build is on (2-8 blocks, default 2) |
 | Open the blueprint box in your main hand | `Alt + right click` |
 | Blueprint draw: record and collect (cut) | `Ctrl + left click` |
 | Blueprint build: enter / record copy / build | `Ctrl + right click` |
 | Blueprint build: switch draw / build mode | `Tab` (box must have no items) |
 | Blueprint draw: snap to block face | Hold `Shift` |
-| Blueprint build: rotate ghost | `V` (before pinning) |
+| Blueprint build: rotate preview | `V` (before pinning) |
 | Blueprint build: pin / unpin | Right click / left click |
 | Exit chain mining / quick build / blueprint build | `` ` `` |
 | Blueprint build: change ghost distance | Scroll |
@@ -141,9 +143,10 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 | 打开 Aliya的工具包 设置 | `Alt + X` |
 | 快捷栏切换（指定行 / 循环） | `X` |
 | 连锁破坏开关 | 短按 `Z`（松开时生效） |
-| 切换大量方块预设 | 按住 `Z` 滚动滚轮 |
+| 切换大量方块预设 | 连锁破坏开启时 `Alt` + 滚轮 |
 | 快速建造开关 | 短按 `C`（松开时生效） |
-| 切换快速建造预设 | 按住 `C` 滚动滚轮 |
+| 切换快速建造预设 | 快速建造开启时 `Alt` + 滚轮 |
+| 调整快速建造默认位置距离 | 快速建造开启时 `Ctrl` + 滚轮（2-8 格，默认 2） |
 | 打开主手蓝图箱界面 | `Alt + 右键` |
 | 蓝图绘制：记录并收取（剪切） | `Ctrl + 左键` |
 | 蓝图建造：进入 / 记录复制 / 建造 | `Ctrl + 右键` |
@@ -176,15 +179,18 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 - 短按 `Z`（可改键）切换连锁状态，**松开按键时生效**；开启后挖方块会把周围相连的同种方块一起破坏，再按一次关闭。
 - 与快速建造、蓝图建造等“模式类”功能互斥：同一时间最多开启一个。
 - 普通方块：以准星指向方块为起点，在周围 3×3×3 内寻找相同方块并继续扩散，直到达到**连锁数量**（默认 64，范围 1-256，包含起点）；超出时优先保留离起点近的。
-- **大量方块**（石头、圆石、花岗岩、下界岩、泥土等）使用预设：横截面（上 / 下 / 左 / 右各 0-4）+ 层数（1-8）沿朝前方向延伸；默认全 0、层数 1 时只挖指向的一格。
+- **大量方块**（黑名单里的方块，默认包含石头、圆石、深板岩、下界岩、末地岩、泥土等）使用预设：横截面（上 / 下 / 左 / 右各 0-4）+ 层数（1-8）沿朝前方向延伸；默认全 0、层数 1 时只挖指向的一格。
+- **黑名单页**：连锁数量下面有“黑名单”按钮，点下后按钮凹下、下面的预设区换成类似物品栏的格子（可见 5 行 × 9 列，总共 16 行，右侧有滚动条），列出使用预设方案的方块；左键选中（红色底色）、右键取消选中，点“删除”移出黑名单。
+- **添加方块**：点“添加”会暂时关闭界面，准星指向的方块显示和连锁破坏一样的白色粗框；左键点它即可加入黑名单，按返回键（默认 `` ` ``，可改键）直接返回、不添加。没有方块物品的方块（水、岩浆等）不能加入。
 - **允许其它方块**（默认开）：形状范围内除指向方块外的其它可破坏方块也一并破坏；不可破坏方块和液体始终跳过。关掉后只破坏与指向方块相同的方块。
 - 掉落物集中到起点并尽量合并成少堆，经验也集中在同一处；每个方块正常扣耐久。
 - 连锁激活时只画外表面转角描边：直接可见部分为白色，被挡住部分为暗白色；指向方块用更粗的白色框标出。
-- 按住 `Z` 滚动滚轮切换预设，到两端停住不循环；切换时用原版动作栏显示预设名称和参数。
+- 连锁破坏开启时，`Alt` + 滚轮切换预设，到两端停住不循环；切换时用原版动作栏显示预设名称和参数。
 
 ### 4. 快速建造
 
-- 短按 `C`（可改键）切换快速建造（松开时生效）；按住 `C` 滚动滚轮切换建造预设。
+- 短按 `C`（可改键）切换快速建造（松开时生效）；快速建造开启时，`Alt` + 滚轮切换建造预设。
+- 准星没有指向方块时，指示器会出现在身前“默认位置距离”处（默认 2 格）：快速建造开启时按住 `Ctrl` + 滚轮可调，范围 2-8 格，调完用动作栏提示当前距离。
 - 开启后、第一次选点前，目标格会跟随准星显示绿色轮廓，便于确认快速建造已经开启。
 - 与连锁破坏、蓝图建造互斥。
 - 右键第一次确定起点，显示绿色规划轮廓、辅助线，以及所需方块数量 / 背包已有数量。
@@ -212,10 +218,10 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 - 之后右键扩选可以重新覆盖之前删除的区域；选区按操作顺序生效。
 - 可多次叠加、多次删除。
 - 按住吸附键（默认 `Shift`，可改键）时，选点会吸附到指向方块的外侧面，和快速建造的选点规则一致。
-- 按 `Ctrl + 左键` 任意位置记录蓝图并收取材料：客户端/服务端重新读取结构，把方块物品、容器内容和流体桶收进蓝图箱，并清除源方块，相当于剪切。
+- 按 `Ctrl + 左键` 任意位置记录蓝图并收取材料：客户端/服务端重新读取结构，把方块物品收进蓝图箱、把流体收进储罐，并清除源方块，相当于剪切。
 - 按 `Ctrl + 右键` 任意位置只记录蓝图（复制）：源方块保持不变，也不向蓝图箱放入材料；两种方式都会退出蓝图建造。
 - 绘制/记录时会**过滤蓝图箱**（方块和容器里的蓝图箱物品都不会被收集），并提示跳过数量。
-- 选区里如果有箱子等容器，容器内容会作为材料需求记录；剪切时先清空并移除方块实体，**不会额外爆一份内容物**。
+- 选区里如果有箱子等容器，容器内容会被记录到第二栏，可以放入对应物品，建造时按原容器、原槽位回填（有多少放多少）；剪切时先清空并移除方块实体，**不会额外爆一份内容物**。
 
 #### 模式 2 · 建造
 
@@ -223,9 +229,11 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 - 虚影默认在视线前方 4 格；滚轮调整距离，`V`（可改键）绕 Y 轴旋转 90°。
 - 右键固定虚影，可以走近查看；左键解除固定。
 - 固定后按 `Ctrl + 右键` 检查材料并建造：
-  - 材料足够：扣除蓝图箱里的方块物品、容器内容和流体桶，按虚影位置建造；
+  - 材料足够：扣除蓝图箱里的方块物品和储罐里的流体，按虚影位置建造；
   - 材料不足：提示并退出蓝图建造。
 - 虚影透明度略微提高，只绘制玩家可见的方块面；蓝图轮廓线仍然正常显示：材料足够时可以建造，轮廓为绿色；材料不足时为红色。
+- 虚影只显示朝向玩家的那一面：箱子等实体方块不会透视，相邻虚影之间的内部面也会被挡住；虚影渲染在云层之后，云不会盖在虚影前面。
+- 蓝图里的流体源头（水、岩浆等）在虚影中按流体颜色显示为半透明方块，同样只显示可见面。
 - 玩家与虚影的碰撞**只在刚放出虚影时检测一次**，之后不会再把虚影从玩家身边推开，方便一眼看到完整结构。
 - 寻找合法放置位置的范围为指示器周围半径 **8 格**的球；找不到位置时不在预览阶段反复提示。
 - 箱子、潜影盒、床等 `ENTITYBLOCK_ANIMATED` 方块在虚影中使用真实 BlockState 渲染；相邻方块隐藏面会剔除，实体方块先写深度再半透明绘制。
@@ -233,31 +241,43 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 #### 自动收集流体
 
 - 默认开启，可在 `Alt + X → 蓝图建造` 页面切换。
-- 开启时，**剪切模式**（`Ctrl + 左键`）记录蓝图会识别可用桶接取的流体源头（水、岩浆等），检查背包 / 快捷栏 / 副手的空桶数量：
-  - 足够：消耗空桶，把对应装满的桶作为材料放入蓝图箱；
-  - 不足：提示并跳过流体源头，但仍创建其它方块的蓝图，不取消记录。
-- **复制模式**（`Ctrl + 右键`）只把流体源头记录进蓝图，不消耗空桶，也不放入装满的桶；之后建造时需要自行准备。
+- 开启时，**剪切模式**（`Ctrl + 左键`）记录蓝图会识别可用桶接取的流体源头（水、岩浆等），并检查蓝图箱**储罐容量**：
+  - 足够：把流体收进储罐（每个源头 1000 mB）；
+  - 不够：提示需要多少 / 容量多少，并**不创建蓝图**（源方块不会被破坏）。
+- **复制模式**（`Ctrl + 右键`）只把流体源头记录进蓝图，不收集流体；之后建造时需要自己往储罐里补。
 - 关闭时保持旧行为：流体源头不参与蓝图。
+
+#### 记录容器内物品
+
+- 默认开启，可在 `Alt + X → 蓝图建造` 页面切换。
+- 开启时，记录蓝图会把容器里的物品记到第二栏，建造时按原来的容器、原来的槽位回填；潜影盒这类容器只记录成“装着物品的潜影盒物品”，里面的东西随物品本身走。
+- 关闭时容器只记录方块本身，建成后是空的；**剪切**时容器里的物品会掉在原地，不会凭空消失。
 
 ### 6. 蓝图箱
 
 - **打开界面**：主手拿着蓝图箱按 `Alt + 右键`（可改键），等同于右键世界里的蓝图箱方块；清空蓝图 / 一键取出 / 一键存入、滚动都可用。
 - 等级与容量（均为 9 列）：
 
-| 等级 | 容量 | 合成 / 升级 |
-| --- | --- | --- |
-| 蓝图箱 | 27（3×9） | 木箱 + 8 纸 |
-| 铜制蓝图箱 | 45（5×9） | 蓝图箱 + 8 铜锭 |
-| 铁制蓝图箱 | 63（7×9） | 铜制 + 8 铁锭 |
-| 金制蓝图箱 | 81（9×9） | 铁制 + 8 金锭 |
-| 钻石蓝图箱 | 108（12×9） | 金制 + 8 钻石 |
-| 下界合金蓝图箱 | 144（16×9） | 锻造台：钻石箱 + 下界合金锭 + 下界合金升级模板 |
+| 等级 | 容量 | 内容栏 | 储罐 | 合成 / 升级 |
+| --- | --- | --- | --- | --- |
+| 蓝图箱 | 27（3×9） | 9（1×9） | 2000 mB | 木箱 + 8 纸 |
+| 铜制蓝图箱 | 45（5×9） | 18（2×9） | 4000 mB | 蓝图箱 + 8 铜锭 |
+| 铁制蓝图箱 | 63（7×9） | 27（3×9） | 8000 mB | 铜制 + 8 铁锭 |
+| 金制蓝图箱 | 81（9×9） | 36（4×9） | 16000 mB | 铁制 + 8 金锭 |
+| 钻石蓝图箱 | 108（12×9） | 45（5×9） | 32000 mB | 金制 + 8 钻石 |
+| 下界合金蓝图箱 | 144（16×9） | 54（6×9） | 64000 mB | 锻造台：钻石箱 + 下界合金锭 + 下界合金升级模板 |
 
 - 方块直接继承原版 `ChestBlock` / `ChestBlockEntity`，使用原版 `ChestRenderer`，拥有箱子形状、朝向、比较器、开盖音效和翻盖动画；蓝图箱强制保持单箱，不会合并成双箱，也不能放进另一个蓝图箱。
-- 界面最多显示 5 行 × 9 列，列与玩家背包对齐；超过 5 行时右侧有滚动条，可用滚轮或拖动。主面板使用原版 `generic_54.png`，右侧扩展区放滚动条和按钮，左右之间没有黑缝。
+- 界面最多显示 5 行 × 9 列，列与玩家背包对齐；超过 5 行时右侧有滚动条，可用滚轮或拖动。主面板使用原版 `generic_54.png`，右侧扩展区放储罐和切换按钮，三个操作按钮在玩家物品栏右边。
 - 没有蓝图时槽位使用合成器同款禁用覆盖层；记录蓝图后显示半透明幽灵占位和每格需求量。占位只接受对应物品，并遵守每格上限。
 - 槽位悬停显示物品说明：空占位显示占位物品和需求量，已放入物品显示物品本身说明。
-- 容器内容物也作为材料成本：例如蓝图里有一个装着 3 个钻石的箱子，需要额外准备 3 个钻石；建造完成后放回原容器原槽位。
+- 右上角的储罐是竖着的刻度条（每个等级都有，容量随等级提高）：已存流体用流体本身的颜色显示占比（颜色取自流体贴图的平均色并乘上染色值），蓝图需要但还没放进的部分显示同色浅色，未使用的部分保持禁用底色；鼠标悬停会显示该流体的存量 / 容量和蓝图需求，悬停的一段会加宽突出。
+- 储罐与桶交互：手上拿着空桶时，把鼠标指向某一段流体再点击，可以取出 1 桶（1000 mB）；手上拿着液体桶时，点击储罐任意位置可以把这 1 桶存入。存量不会超过蓝图对该流体的需求，装到上限或蓝图不需要这种流体时会提示。
+- 储罐左边的切换按钮是原版风格的小方按钮（中间一个箱子图标，没有最外层黑边）：默认凸起，显示蓝图箱里的建造材料；点一下凹下去，改显示蓝图内容器里的物品。潜影盒这类容器不展开：蓝图只记录“装着物品的潜影盒”这个物品，里面的东西由潜影盒本身正常记录（悬停能看到内容，取出后也是完整的），第一栏只占一个容器物品。
+- 第二栏同样可以放入物品，建造时按“有多少放多少”回填到普通容器（箱子等）原来的位置，缺货也不会阻止建造。
+- 第二栏的行数按它自己的容量显示（蓝图箱 1 行、铜制 2 行……下界合金 5 行 + 滚动），不沿用第一栏的行数；超出容量的行不绘制，也不能放入或取出物品。
+- 记录蓝图时，容器内容物必须能完整放进第二栏：超出容量会提示“需要多少格 / 只有多少格”并**取消记录**，不截断、不跳过，避免物品散落在原地或特殊机器里的数量对不上。
+- 容器内容物不作为建造材料的硬性要求；蓝图仍会记录它们，用于第二栏和建造回填。
 - 漏斗可以像普通箱子一样抽取，插入会检查物品和每格上限；比较器按「已填数量 / 总需求数量」输出 0-15 红石强度。
 - 掉落物保护：
   - 所有蓝图箱在水中向上漂浮；
@@ -273,9 +293,9 @@ Aliya's Toolkit 不是“再加一个快捷键”的小模组，而是一套围�
 - 左侧 5 个功能页：`物品切换` / `自动补充` / `连锁破坏` / `快速建造` / `蓝图建造`。
 - **物品切换**：切换模式、指定行和循环方向设置。
 - **自动补充**：完全一致开关 + 3×3 白名单；从背包拿起物品左键设置，右键清空；鼠标悬停在槽位上可以查看物品信息。
-- **连锁破坏**：连锁数量、大量方块预设、锁定方向、允许其它方块。
+- **连锁破坏**：连锁数量、大量方块预设、黑名单（哪些方块使用预设方案，可删可加）、锁定方向、允许其它方块。
 - **快速建造**：预设选择、新建 / 删除、操作 / 维度 / 形状 / 填充。
-- **蓝图建造**：自动收集流体开关，以及绘制 / 建造 / 缩放 / 旋转 / 打开箱子等操作提示；提示中的按键跟随实际按键绑定。
+- **蓝图建造**：自动收集流体、记录容器内物品两个开关，以及绘制 / 建造 / 缩放 / 旋转 / 打开箱子等操作提示；提示中的按键跟随实际按键绑定。
 - 白名单和所有设置都绑定在玩家身上：多人游戏每人一份，随玩家数据保存，死亡重生后保留。
 
 ### 8. 配置与多人游戏

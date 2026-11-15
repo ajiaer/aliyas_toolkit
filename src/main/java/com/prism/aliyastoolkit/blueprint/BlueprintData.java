@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
+import javax.annotation.Nullable;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -17,6 +19,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.LiquidBlock;
+import net.minecraft.world.level.block.ShulkerBoxBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
 
@@ -43,8 +46,16 @@ public final class BlueprintData {
     public record ContainerContent(int x, int y, int z, int slot, ItemStack stack) {
     }
 
+    /** 整体记录的容器（潜影盒等）：坐标 + 带内容的容器物品。 */
+    public record ContainerItem(int x, int y, int z, ItemStack stack) {
+    }
+
     /** 一项材料需求：精确模板 + 总数量。 */
     public record Requirement(ItemStack template, int count) {
+    }
+
+    /** 一项流体需求：流体 + 总量（mB）。 */
+    public record FluidRequirement(net.minecraft.world.level.material.Fluid fluid, int amount) {
     }
 
     /** 蓝图箱里的一格占位。 */
@@ -64,15 +75,23 @@ public final class BlueprintData {
     private final List<Entry> entries;
     private final List<BlockEntityEntry> blockEntities;
     private final List<ContainerContent> contents;
+    private final List<ContainerItem> containerItems;
 
     public BlueprintData(int sizeX, int sizeY, int sizeZ, List<Entry> entries,
             List<BlockEntityEntry> blockEntities, List<ContainerContent> contents) {
+        this(sizeX, sizeY, sizeZ, entries, blockEntities, contents, List.of());
+    }
+
+    public BlueprintData(int sizeX, int sizeY, int sizeZ, List<Entry> entries,
+            List<BlockEntityEntry> blockEntities, List<ContainerContent> contents,
+            List<ContainerItem> containerItems) {
         this.sizeX = Math.max(0, sizeX);
         this.sizeY = Math.max(0, sizeY);
         this.sizeZ = Math.max(0, sizeZ);
         this.entries = List.copyOf(entries);
         this.blockEntities = List.copyOf(blockEntities);
         this.contents = List.copyOf(contents);
+        this.containerItems = List.copyOf(containerItems);
     }
 
     public BlueprintData(int sizeX, int sizeY, int sizeZ, List<Entry> entries) {
@@ -101,6 +120,10 @@ public final class BlueprintData {
 
     public List<ContainerContent> contents() {
         return this.contents;
+    }
+
+    public List<ContainerItem> containerItems() {
+        return this.containerItems;
     }
 
     public boolean isEmpty() {
@@ -138,29 +161,98 @@ public final class BlueprintData {
     }
 
     /**
-     * 需要的全部材料：各方块自身的物品 + 容器内容物。
+     * 需要的方块材料（不含流体，也不含容器内容物）。
      * <p>
-     * 相同精确 ItemStack 会合并；可以用桶接取的流体源头按对应桶物品计算，
-     * 没有对应物品的方块（火等）不消耗物品。
+     * 流体源头由蓝图箱的储罐提供，容器内容物只作为展示、不参与建造材料，因此都不在这里。
      */
     public List<Requirement> requirements() {
+        return blockRequirements();
+    }
+
+    /** 方块自身对应的物品需求（用于蓝图箱格子的占位）。 */
+    public List<Requirement> blockRequirements() {
         List<Requirement> list = new ArrayList<>();
         for (Entry entry : this.entries) {
-            addRequirement(list, requirementFor(entry.state()));
+            ItemStack override = containerItemAt(entry.x(), entry.y(), entry.z());
+            addRequirement(list, override.isEmpty() ? requirementFor(entry.state()) : override);
         }
+        list.sort(Comparator.comparing(BlueprintData::requirementSortKey));
+        return list;
+    }
+
+    /** 该坐标是按整体记录的容器时，返回带内容的容器物品；否则返回空。 */
+    private ItemStack containerItemAt(int x, int y, int z) {
+        for (ContainerItem item : this.containerItems) {
+            if (item.x() == x && item.y() == y && item.z() == z) {
+                return item.stack();
+            }
+        }
+        return ItemStack.EMPTY;
+    }
+
+    /** 破坏后内容物仍留在容器里的方块（潜影盒，以及继承潜影盒的模组容器）。 */
+    public static boolean keepsItemsInside(BlockState state) {
+        return state.getBlock() instanceof ShulkerBoxBlock;
+    }
+
+    /** 蓝图里容器内的物品需求（单独一栏展示，不参与建造）。潜影盒这类特殊容器不展开。 */
+    public List<Requirement> containerRequirements() {
+        List<Requirement> list = new ArrayList<>();
         for (ContainerContent content : this.contents) {
+            BlockState state = stateAt(content.x(), content.y(), content.z());
+            if (state != null && state.getBlock() instanceof ShulkerBoxBlock) {
+                continue;
+            }
             addRequirement(list, content.stack());
         }
         list.sort(Comparator.comparing(BlueprintData::requirementSortKey));
         return list;
     }
 
-    /** 一个方块状态在蓝图里对应的建造材料；流体源头用对应的桶物品。 */
+    @Nullable
+    private BlockState stateAt(int x, int y, int z) {
+        for (Entry entry : this.entries) {
+            if (entry.x() == x && entry.y() == y && entry.z() == z) {
+                return entry.state();
+            }
+        }
+        return null;
+    }
+
+    /** 流体源头需求（每个源头按 1 桶 = 1000 mB 计算）。 */
+    public List<FluidRequirement> fluidRequirements() {
+        List<FluidRequirement> list = new ArrayList<>();
+        for (Entry entry : this.entries) {
+            BlockState state = entry.state();
+            if (!(state.getBlock() instanceof LiquidBlock) || !state.getFluidState().isSource()) {
+                continue;
+            }
+            var fluid = state.getFluidState().getType();
+            if (fluid == net.minecraft.world.level.material.Fluids.EMPTY) {
+                continue;
+            }
+            int amount = FluidTank.BUCKET_VOLUME;
+            boolean merged = false;
+            for (int i = 0; i < list.size(); i++) {
+                FluidRequirement existing = list.get(i);
+                if (existing.fluid() == fluid) {
+                    list.set(i, new FluidRequirement(fluid, existing.amount() + amount));
+                    merged = true;
+                    break;
+                }
+            }
+            if (!merged) {
+                list.add(new FluidRequirement(fluid, amount));
+            }
+        }
+        return list;
+    }
+
+    /** 一个方块状态在蓝图里对应的建造材料；流体源头由储罐提供，这里不消耗物品。 */
     private static ItemStack requirementFor(BlockState state) {
         FluidState fluid = state.getFluidState();
         if (state.getBlock() instanceof LiquidBlock && fluid.isSource()) {
-            Item bucket = fluid.getType().getBucket();
-            return bucket == null || bucket == Items.AIR ? ItemStack.EMPTY : new ItemStack(bucket);
+            return ItemStack.EMPTY;
         }
         Item item = state.getBlock().asItem();
         return item == Items.AIR ? ItemStack.EMPTY : new ItemStack(item);
@@ -201,9 +293,24 @@ public final class BlueprintData {
                 + "|" + requirement.template().getComponents();
     }
 
+    /** 一组需求按堆叠上限换算成需要的格子数。 */
+    public static int slotCount(List<Requirement> requirements) {
+        int slots = 0;
+        for (Requirement requirement : requirements) {
+            int maxStack = Math.max(1, requirement.template().getMaxStackSize());
+            slots += (Math.max(0, requirement.count()) + maxStack - 1) / maxStack;
+        }
+        return slots;
+    }
+
     /** 按物品和堆叠上限把蓝图分配成蓝图箱格子。 */
     public List<SlotDef> createSlots(int capacity) {
         return createSlots(this.requirements(), capacity);
+    }
+
+    /** 容器内容物一栏的占位分配（只用于显示）。 */
+    public List<SlotDef> createContentSlots(int capacity) {
+        return createSlots(this.containerRequirements(), capacity);
     }
 
     public static List<SlotDef> createSlots(List<Requirement> requirements, int capacity) {
@@ -279,6 +386,17 @@ public final class BlueprintData {
             contents.add(contentTag);
         }
         tag.put("Contents", contents);
+
+        ListTag containerItems = new ListTag();
+        for (ContainerItem item : this.containerItems) {
+            CompoundTag itemTag = new CompoundTag();
+            itemTag.putInt("X", item.x());
+            itemTag.putInt("Y", item.y());
+            itemTag.putInt("Z", item.z());
+            itemTag.put("Item", item.stack().save(registries));
+            containerItems.add(itemTag);
+        }
+        tag.put("ContainerItems", containerItems);
         return tag;
     }
 
@@ -322,7 +440,17 @@ public final class BlueprintData {
             contents.add(new ContainerContent(contentTag.getInt("X"), contentTag.getInt("Y"),
                     contentTag.getInt("Z"), contentTag.getInt("Slot"), stack));
         }
-        return new BlueprintData(sizeX, sizeY, sizeZ, entries, blockEntities, contents);
+        List<ContainerItem> containerItems = new ArrayList<>();
+        ListTag containerItemList = tag.getList("ContainerItems", Tag.TAG_COMPOUND);
+        for (int i = 0; i < containerItemList.size(); i++) {
+            CompoundTag itemTag = containerItemList.getCompound(i);
+            ItemStack stack = ItemStack.parseOptional(registries, itemTag.getCompound("Item"));
+            if (!stack.isEmpty()) {
+                containerItems.add(new ContainerItem(itemTag.getInt("X"), itemTag.getInt("Y"),
+                        itemTag.getInt("Z"), stack));
+            }
+        }
+        return new BlueprintData(sizeX, sizeY, sizeZ, entries, blockEntities, contents, containerItems);
     }
 
     /**
